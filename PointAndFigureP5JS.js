@@ -4,7 +4,6 @@ var jsonPafiParameter;
 //Instances
 var marketData;
 var pafiCanvas;
-var snapshot;
 //Constants
 var MARGIN_ROW = 2;
 var MARGIN_YAXIS_LABEL = 30;
@@ -111,22 +110,41 @@ PaFiCanvas.prototype.drawframe = function(){
 // SanpShots Class
 SnapShot = function(){
   this.snapshots = [];
-  this.boxSize = marketData.boxSize;
-  this.reversalAmount = marketData.reversalAmount;
-  this.rowMax;
-  this.columnMax;
+FigureCell = function(){
+  this.symbol = "";
+  this.comment = "";
+};
+
+FigureColumn = function(){
+  this.column = [];
+}
+
+FigureMatrix = function(){
+  this.matrix = [];
+};
+
+
+SnapShot = function(_time){
+  this.time = _time;
+  this.priceChange = "Start";
+  this.trend = "NoTrend";
+  this.figureMatrix;
 
 };
 
-/*
-  var figureMatrix = new FigureMatrix();
-  figureMatrix.addNewColumn();
-  snapshot = new SnapShot(marketData.candles[0].time,figureMatrix);
-  snapshots.push(snapshot);
-  
-  console.log(figureMatrix);
-  console.log(snapshots);
-*/
+SnapShot.prototype.generateFirstSnapShot = function(){
+  var newColumn = new FigureColumn();
+  for(var i=0; i<marketData.rowNum; i++){
+    var newCell = new FigureCell();
+    newColumn.column.push(newCell);
+  }
+
+  var newFigureMatrix = new FigureMatrix();
+  newFigureMatrix.matrix.push(newColumn);
+
+  this.figureMatrix = newFigureMatrix;
+
+};
 
 
 //Main
@@ -155,7 +173,15 @@ function setup() {
 
 
   //Generate SnapShots
-  snapshot = new SnapShot();
+  //First SnapShot
+  var snapshot = new SnapShot(marketData.candles[0].time);
+  snapshot.generateFirstSnapShot();
+  snapshots.push(snapshot);
+
+  console.log(snapshots);
+
+  //Second and after
+
 
 }
 
