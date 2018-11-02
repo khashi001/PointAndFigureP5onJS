@@ -3,14 +3,18 @@ var jsonMarketData;
 var jsonPafiParameter;
 //Instances
 var marketData;
-var pafiCanvas;
-var snapshots= [];
+var paFiCanvas;
+var snapShots= [];
 //Constants
 var MARGIN_ROW = 2;
 var MARGIN_YAXIS_LABEL = 30;
 var MARGIN_TITLE_BAR = 50;
+var MARGIN_XCELL = 2;
 var PAFI_CELL_SIZE = 10;
 var PAFI_COLUMN_NUM = 100; //tekitou
+var MARGIN_RIGHT_COLUMN = 2;
+//Iteration
+var snapIterator = 0;
 
 
 // Market Data Class
@@ -43,7 +47,7 @@ MarketData.prototype.initParam = function(){
 
 MarketData.prototype.getRowNum = function(_price){
   var row = parseInt( (_price - this.minPrice) / this.boxSize );
-  console.log("getRowNum: rowNum="+row+", _price="+_price+", boxSize="+this.boxSize);
+  // console.log("getRowNum: rowNum="+row+", _price="+_price+", boxSize="+this.boxSize);
   return row;
 }
 
@@ -61,23 +65,32 @@ MarketData.prototype.makeScale = function(){
         this.minPrice = this.candles[i].mid.l;
       }      
     }
-    // console.log(this.maxPrice);
-    // console.log(this.minPrice);
-
     this.numOfRows = MARGIN_ROW + parseInt((this.maxPrice - this.minPrice)/this.boxSize);
-    // console.log("numOfRows = " + this.numOfRows);
     this.columnNum = parseInt((windowWidth-MARGIN_YAXIS_LABEL)/PAFI_CELL_SIZE);
-    // console.log("columnNum = " + this.columnNum);
 }
+
+MarketData.prototype.updateColumnNum = function(){
+  console.log("updateColumnNum");
+  console.log(" shanpShots.length=",snapShots.length);
+  numOfColumn = snapShots[snapShots.length-1].figureMatrix.columns.length;
+  console.log(" numOfColumn = "+numOfColumn);
+  if(numOfColumn > this.columnNum){
+    this.columnNum = numOfColumn;
+  }
+}
+
 
 // PaFi Canvas Class
 PaFiCanvas = function(){
   this.height = PAFI_CELL_SIZE*marketData.numOfRows+MARGIN_TITLE_BAR;
-  this.width = PAFI_CELL_SIZE*marketData.columnNum+MARGIN_YAXIS_LABEL;
-  
-  // console.log("width="+this.width);
-  // console.log("hight = "+this.height);  
+  this.width = PAFI_CELL_SIZE*marketData.columnNum+MARGIN_YAXIS_LABEL+MARGIN_RIGHT_COLUMN;
+}
 
+PaFiCanvas.prototype.updateWidth = function(){
+  console.log("updateWidth");
+  this.width = PAFI_CELL_SIZE*marketData.columnNum+MARGIN_YAXIS_LABEL;
+  console.log(PAFI_CELL_SIZE,marketData.columnNum,MARGIN_YAXIS_LABEL);
+  console.log(" this.width="+this.width);
 }
 
 PaFiCanvas.prototype.drawframe = function(){
@@ -87,7 +100,12 @@ PaFiCanvas.prototype.drawframe = function(){
     var x1 = MARGIN_YAXIS_LABEL;
     var x2 = this.width;
     var y1 = MARGIN_TITLE_BAR + PAFI_CELL_SIZE*i;
-    stroke(240);
+    if((marketData.numOfRows-i-1)%10 == 0){
+      stroke(150);
+    }
+    else{
+      stroke(100);
+    }
     line(x1,y1,x2,y1);
   }
 
@@ -96,7 +114,12 @@ PaFiCanvas.prototype.drawframe = function(){
     y1 = MARGIN_TITLE_BAR;
     y2 = this.height;PAFI_CELL_SIZE*i;
     x1 = MARGIN_YAXIS_LABEL + PAFI_CELL_SIZE*i;
-    stroke(240);
+    if((i-1)%10 == 0){
+      stroke(150);
+    }
+    else{
+      stroke(100);
+    }
     line(x1,y1,x1,y2);
   }
 
@@ -111,8 +134,29 @@ PaFiCanvas.prototype.drawframe = function(){
   textSize(20);
   text(marketData.candles[0].time, this.width*0.4, MARGIN_TITLE_BAR*0.45);
   text(marketData.candles[marketData.candles.length-1].time, this.width*0.4, MARGIN_TITLE_BAR*0.90);
-}
 
+
+};
+
+PaFiCanvas.prototype.drawMatrix = function(snapID){
+  textSize(10);
+  var latestFigureMatrix = snapShots[snapID].figureMatrix;
+  for(var column=0; column < latestFigureMatrix.columns.length; column++){
+    for(var row=0; row < marketData.numOfRows; row++){
+      var symbol = latestFigureMatrix.columns[column].cellss[row].symbol;
+      text(symbol, this.getCanvasXaxis(column),this.getCanvasYaxis(row));
+    }
+  }
+
+};
+
+PaFiCanvas.prototype.getCanvasXaxis = function(_column){
+  return MARGIN_YAXIS_LABEL + PAFI_CELL_SIZE * _column + MARGIN_XCELL;
+};
+
+PaFiCanvas.prototype.getCanvasYaxis = function(_row){
+  return  MARGIN_TITLE_BAR + PAFI_CELL_SIZE*(marketData.numOfRows - _row);
+};
 
 // SanpShots Class
 FigureCell = function(){
@@ -153,8 +197,8 @@ SnapShot.prototype.generateFirstSnapShot = function(){
   this.figureMatrix = newFigureMatrix;
   this.trend = "Up";
 
-  console.log(this.figureMatrix);
-  console.log("generateFirstSnapShot done.");
+  // console.log(this.figureMatrix);
+  // console.log("generateFirstSnapShot done.");
 
 
 };
@@ -162,38 +206,59 @@ SnapShot.prototype.generateFirstSnapShot = function(){
 
 SnapShot.prototype.copyLatestSnapShot = function(){
   var newFigureMatrix = new FigureMatrix();
-  var lastSnapShotID = snapshots.length-1;
+  var lastSnapShotID = snapShots.length-1;
   console.log("copyLatestSnapShot started.");
-  
-  var columnLength = snapshots[lastSnapShotID].figureMatrix.columns.length;
-  console.log("columnLength="+columnLength);
+  console.log(lastSnapShotID);
+  console.log(snapShots[lastSnapShotID]);
+  var columnLength = snapShots[lastSnapShotID].figureMatrix.columns.length;
+  // console.log("columnLength="+columnLength);
   var i=0;
   for(var i=0; i<columnLength; i++){
     var newColumn = new FigureColumn();
     for(var j=0; j<marketData.numOfRows; j++){
       var newCell = new FigureCell();
       newCell.symbol = 
-        snapshots[lastSnapShotID].figureMatrix.columns[i].cellss[j].symbol;
+        snapShots[lastSnapShotID].figureMatrix.columns[i].cellss[j].symbol;
       newCell.comment = 
-        snapshots[lastSnapShotID].figureMatrix.columns[i].cellss[j].comment;
+        snapShots[lastSnapShotID].figureMatrix.columns[i].cellss[j].comment;
       newColumn.cellss.push(newCell);
     }    
     newFigureMatrix.columns.push(newColumn);
   }
   this.figureMatrix = newFigureMatrix;
-  this.trend = snapshots[lastSnapShotID].trend;
-  console.log("copyLatestSnapShot done.");
+  this.trend = snapShots[lastSnapShotID].trend;
+  // console.log("copyLatestSnapShot done.");
 };
 
+SnapShot.prototype.getLastRowNum = function(){
+  var row;
+  var lastColumnID = this.figureMatrix.columns.length-1;
+  var lastColumn = this.figureMatrix.columns[lastColumnID];
+  for(var i=0; i<marketData.numOfRows-1; i++){
+    if(lastColumn.cellss[i].symbol == "O" && lastColumn.cellss[i+1].symbol ==""){
+      row = i;
+      break;
+    }
+    if(lastColumn.cellss[i].symbol == "" && lastColumn.cellss[i+1].symbol =="X"){
+      row = i+1;
+      break;
+    }
+  }
+  console.log("     getLastRowNum done. column = "+lastColumnID+", row="+row);
+  return row;  
+}
+
 SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
-  console.log("updateFigureMatrix started.");
+  console.log(" updateFigureMatrix started.");
   //detect price change
   var lastPrice = marketData.candles[_latestCandle-1].mid.c;
   var newPrice = marketData.candles[_latestCandle].mid.c;
 
-  var lastPriceRowNum = marketData.getRowNum(lastPrice);
+  var lastPriceRowNum = this.getLastRowNum();
+  // var lastPriceRowNum = marketData.getRowNum(lastPrice);
   var newPriceRowNum = marketData.getRowNum(newPrice);
-  console.log("newPriceRowNum="+newPriceRowNum);
+      console.log("  lastPriceRowNum="+lastPriceRowNum);  
+      console.log("  newPriceRowNum="+newPriceRowNum);
 
   var priceChange;
   if(lastPriceRowNum > newPriceRowNum){
@@ -213,20 +278,17 @@ SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
     if(priceChange == "Up"){
       //1.
       console.log("trend:Up priceChange:Up");      
-      this.writeMergedCell(newPriceRowNum, "O", "");
+      this.writeMergedCell(this.figureMatrix.columns.length-1, newPriceRowNum, "O", "");
     }
     else if(priceChange == "Down"){
       //2.
       console.log("  trend:Up priceChange:Down");    
-      console.log("  lastPriceRowNum="+lastPriceRowNum);  
-      console.log("  newPriceRowNum="+newPriceRowNum);
-      console.log("  marketData.reversalAmount="+marketData.reversalAmount);
       if ((lastPriceRowNum - newPriceRowNum) > marketData.reversalAmount){
         //trend changed
         console.log("  trend change to Down.");
         var newColumn = this.generateNewColumn();
         this.figureMatrix.columns.push(newColumn);
-        this.writeRangeCells(lastPriceRowNum-1, newPriceRowNum, "X");
+        this.writeRangeCells(this.figureMatrix.columns.length-1, lastPriceRowNum-1, newPriceRowNum, "X");
 
         var newColumnID = this.figureMatrix.columns.length-1;
         this.figureMatrix.columns[newColumnID].cellss[lastPriceRowNum].comment = marketData.candles[_latestCandle].time;
@@ -248,22 +310,20 @@ SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
       //4.
       if (( newPriceRowNum - lastPriceRowNum) > marketData.reversalAmount){
         //trend changed
-        console.log("  trend change to Down.");
+        console.log("  trend change to Up.");
         var newColumn = this.generateNewColumn();
-        // var newColumn = new FigureColumn();
         this.figureMatrix.columns.push(newColumn);
-        this.writeRangeCells(lastPriceRowNum+1, newPriceRowNum, "O");
+        this.writeRangeCells(this.figureMatrix.columns.length-1,lastPriceRowNum+1, newPriceRowNum, "O");
         var newColumnNum = this.figureMatrix.columns.length-1;
         this.figureMatrix.columns[newColumnNum].cellss[lastPriceRowNum].comment = marketData.candles[_latestCandle].time;
-
-        this.trend = "Down";
+        this.trend = "Up";
       }
     }
     else if(priceChange == "Down"){
       console.log("trend:Down priceChange:Down");      
       //5. 
       //add symbol
-      this.writeMergedCell(newPriceRowNum, "X", "");
+      this.writeMergedCell(this.figureMatrix.columns.length-1,newPriceRowNum, "X", "");
     }
     else if(priceChange == "Keep"){
       console.log("trend:Down priceChange:Keep");      
@@ -275,9 +335,6 @@ SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
   }
 
   console.log("lastTrend="+lastTrend+",priceChange="+priceChange+",newTrend="+this.trend);
-  //update figure
-
-  console.log("updateFigureMatrix done.");
 
 }
 
@@ -299,44 +356,41 @@ SnapShot.prototype.generateLatestSnapShot = function(_latestCandle){
   this.updateFigureMatrix(_latestCandle);
 }
 
-SnapShot.prototype.writeRangeCells = function(_fromRow, _toRow, _symbol){
-  console.log("writeRangeCells started with parameters:");
-  console.log(_fromRow, _toRow, _symbol);
+SnapShot.prototype.writeRangeCells = function(_column, _fromRow, _toRow, _symbol){
+  console.log("    writeRangeCells started with parameters:");
+  console.log("    "+_column, _fromRow, _toRow, _symbol);
 
-  var lastColumn = this.figureMatrix.columns.length-1;
+  // var lastColumn = this.figureMatrix.columns.length-1;
   if(_fromRow < _toRow){
     for(var i=_fromRow; i<=_toRow; i++){
-      this.figureMatrix.columns[lastColumn].cellss[i].symbol = _symbol;
+      this.figureMatrix.columns[_column].cellss[i].symbol = _symbol;
     }
   }
   else{
     for(var i=_toRow; i<=_fromRow; i++){
-      this.figureMatrix.columns[lastColumn].cellss[i].symbol = _symbol;
+      this.figureMatrix.columns[_column].cellss[i].symbol = _symbol;
     }
   }
 }
 
-SnapShot.prototype.writeMergedCell = function(_row, _symbol, _comment){
-  console.log("writeMergedCell started. _row="+_row+",_symbol="+_symbol);
+SnapShot.prototype.writeMergedCell = function(_column, _row, _symbol){
+  console.log("    writeMergedCell started.");
+  console.log("    "+_column,_row,_symbol);
 
   //search edge symbol 
-  var lastColumn = this.figureMatrix.columns.length-1;
-  // console.log("   _row="+_row+",_symbol="+_symbol);
-  // console.log("   lastColumn="+lastColumn);
-  // console.log(this.figureMatrix);
+  // var lastColumn = this.figureMatrix.columns.length-1;
   var lowerEdge = 0;
   var higherEdge = 0;
   for(var i=0; i<marketData.numOfRows-1; i++){
-    // console.log("   "+i);
-    if(this.figureMatrix.columns[lastColumn].cellss[i].symbol=="" 
+    if(this.figureMatrix.columns[_column].cellss[i].symbol=="" 
         && 
-       this.figureMatrix.columns[lastColumn].cellss[i+1].symbol!=""){
+       this.figureMatrix.columns[_column].cellss[i+1].symbol!=""){
       lowerEdge = i+1;
     }
-    if(this.figureMatrix.columns[lastColumn].cellss[i].symbol!=""
+    if(this.figureMatrix.columns[_column].cellss[i].symbol!=""
         &&
-        this.figureMatrix.columns[lastColumn].cellss[i+1].symbol==""){
-      higherEdge = i+1;
+        this.figureMatrix.columns[_column].cellss[i+1].symbol==""){
+      higherEdge = i;
     }
   }
   console.log("lowerEdge="+lowerEdge+", higherEdge="+higherEdge);
@@ -345,13 +399,13 @@ SnapShot.prototype.writeMergedCell = function(_row, _symbol, _comment){
   if(_symbol=="O"){
     //from lower edge to _row
     for(var i=lowerEdge; i<_row+1; i++){
-      this.figureMatrix.columns[lastColumn].cellss[i].symbol = "O";
+      this.figureMatrix.columns[_column].cellss[i].symbol = "O";
     }
   }
   else if(_symbol=="X"){
     //from higher edge to _row
     for(var i=higherEdge; i>_row-1; i--){
-      this.figureMatrix.columns[lastColumn].cellss[i].symbol = "X";
+      this.figureMatrix.columns[_column].cellss[i].symbol = "X";
     }
   }
   else{
@@ -359,10 +413,7 @@ SnapShot.prototype.writeMergedCell = function(_row, _symbol, _comment){
     console.log("unexpedted _symbol in writeMergedCell: "+_symbol);
   }
 
-  //write comment
-  this.figureMatrix.columns[lastColumn].cellss[_row].comment = _comment;
-  // console.log(this.figureMatrix.columns);
-  console.log("writeMergedCell done.");
+  // console.log("writeMergedCell done.");
 
 }
 
@@ -371,8 +422,6 @@ SnapShot.prototype.writeMergedCell = function(_row, _symbol, _comment){
 function preload(){
   jsonPafiParameter = loadJSON('PafiParameter.json');
   jsonMarketData = loadJSON('EUR_JPY_D.json');
-  // console.log(jsonMarketData);
-  // console.log(jsonPafiParameter);
 }
 
 function setup() {  
@@ -388,34 +437,32 @@ function setup() {
   paFiCanvas = new PaFiCanvas();
   createCanvas(paFiCanvas.width, paFiCanvas.height); 
   background(10,10,10);
-  frameRate(1);
+  frameRate(10);
 
-
-  //Generate SnapShots
-  //First SnapShot
+  //FigureMatrix
   var snapshot = new SnapShot(marketData.candles[0].time);
   snapshot.generateFirstSnapShot();
-  snapshots.push(snapshot);
-  console.log("### First SnapShots=");
-  console.log(snapshots);
+  snapShots.push(snapshot);
 
-  //Second and after
-  for (var i=1; i<marketData.candles.length; i++){
-    console.log("### Snapshot "+i);
+  for(var i=1; i<marketData.candles.length; i++){
     var snapshot = new SnapShot(marketData.candles[i].time);
     snapshot.generateLatestSnapShot(i);
-    snapshots.push(snapshot);
-
-    console.log("snapshots=");
-    console.log(snapshots);
+    snapShots.push(snapshot);
   }
+  marketData.updateColumnNum();
+  paFiCanvas.updateWidth();
 
-
-
+  console.log(snapShots);
 }
 
 function draw() {
+  //frame
   paFiCanvas.drawframe();
 
-
+  //FigureMatrix
+  if(snapIterator < marketData.candles.length){
+    console.log("===== "+snapIterator+" =====");
+    paFiCanvas.drawMatrix(snapIterator);    
+    snapIterator++;
+  }
 }
