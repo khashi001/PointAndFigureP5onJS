@@ -5,6 +5,7 @@ var jsonPafiParameter;
 var marketData;
 var paFiCanvas;
 var snapShots = [];
+var tradeRecords = [];
 // var this.figureMatrix.tradePosition;
 //Constants
 var MARGIN_ROW = 2;
@@ -14,7 +15,9 @@ var MARGIN_XCELL = 2;
 var PAFI_CELL_SIZE = 10;
 var PAFI_COLUMN_NUM = 100; //tekitou
 var MARGIN_RIGHT_COLUMN = 2;
-var TRADE_AMOUNT = 10; //tekitou
+var TRADE_AMOUNT = 10000; // DMM FX
+var TRADE_FEE_RATE = 0.00002; //DMM FX
+var INITIAL_DEPOSIT = 5000000;
 //Iteration
 var snapIterator = 0;
 var aPressed = 0;
@@ -216,6 +219,77 @@ TradePosition.prototype.writePosition = function( _date, _columnID, _row, _bs, _
   if(debug_writePosition){console.log("writePosition. ",_date, _columnID, _row, _bs, _amount, _price);}
 }
 
+TradePosition.prototype.entry = function(_sign, _time, _columnID, _row, _price){
+
+  //update position
+  this.writePosition(
+    _time,
+    _columnID, 
+    _row,
+    _sign,
+    TRADE_AMOUNT, 
+    _price);
+
+  //generate record
+  var newRecord = new TradeRecord();
+  newRecord.pair = marketData.instrument;
+  newRecord.bs = _sign;
+  newRecord.entryDate = _time;
+  newRecord.entryPrice = _price;
+  newRecord.amount = TRADE_AMOUNT;
+  newRecord.exitDate = "";
+  newRecord.exitPrice = 0;
+  newRecord.fee = _price * TRADE_AMOUNT * TRADE_FEE_RATE;
+  newRecord.profitLoss = 0;
+  newRecord.balance = 
+    tradeRecords[tradeRecords.length-1].balance - 
+    (_price * TRADE_AMOUNT + newRecord.fee);
+
+  tradeRecords.push(newRecord);
+  console.log("ENTRY ",_sign,_time,_columnID,_row,_price);
+  
+}
+
+
+TradePosition.prototype.exit = function(_sign, _time, _columnID, _row, _price){
+  this.writePosition(
+    _time,
+    _columnID, 
+    _row,
+    "",
+    TRADE_AMOUNT, 
+    _price);
+
+  var record = tradeRecords[tradeRecords.length-1];
+  record.exitDate = _time;
+  if(record.bs == _sign){ console.log("Unexpected Operation in TradePosition:exit.");}
+  record.exitPrice = _price;
+  record.fee = record.fee + _price * TRADE_AMOUNT * TRADE_FEE_RATE;
+  if(_sign == "Buy"){
+    record.profitLoss = (record.exitPrice - record.entryPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
+  }
+  else{
+    record.profitLoss = (record.entryPrice - record.exitPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
+  }
+  record.balance = record.balance + (_price * TRADE_AMOUNT) - record.fee;
+  
+  console.log("EXIT ",_sign,_time,_columnID,_row,_price);
+
+}
+
+//Trade Record Class
+TradeRecord = function (){
+  this.pair;
+  this.bs;
+  this.entrydate;
+  this.entryPrice;
+  this.amount;
+  this.exitDate;
+  this.exitPrice;
+  this.fee;
+  this.profitLoss;
+  this.balance;
+}
 
 // SanpShots Class
 FigureCell = function(){
@@ -532,6 +606,7 @@ TradeSign = function(){
 }
 
 
+
 SnapShot.prototype.trade = function(_latestCandle){
   var columnID = this.figureMatrix.columns.length-1;
   var sign = new TradeSign();
@@ -540,58 +615,73 @@ SnapShot.prototype.trade = function(_latestCandle){
   if (this.figureMatrix.tradePosition.bs == ""){
     if(sign.sign == "Buy"){
       //entry(Buy)
-      this.figureMatrix.tradePosition.writePosition(
-        this.time,
-        columnID, 
-        sign.row,
-        "Buy",
-        TRADE_AMOUNT, 
+      this.figureMatrix.tradePosition.entry(
+        "Buy", this.time, columnID, sign.row, 
         marketData.candles[_latestCandle+1].mid.o);
-      console.log("ENTRY ",this.time, columnID,sign.row,"Buy",TRADE_AMOUNT, 
-        marketData.candles[_latestCandle+1].mid.o);
+      // this.figureMatrix.tradePosition.writePosition(
+      //   this.time,
+      //   columnID, 
+      //   sign.row,
+      //   "Buy",
+      //   TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o);
+      // console.log("ENTRY ",this.time, columnID,sign.row,"Buy",TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o);
     }
     else if (sign.sign == "Sell"){
       //entry(sell)
-      this.figureMatrix.tradePosition.writePosition(
-        this.time,
-        columnID, 
-        sign.row,        
-        "Sell",
-        TRADE_AMOUNT, 
+      this.figureMatrix.tradePosition.entry(
+        "Sell", this.time, columnID, sign.row, 
         marketData.candles[_latestCandle+1].mid.o);
-      console.log("ENTRY ",this.time,columnID,sign.row,"Sell",TRADE_AMOUNT, 
-        marketData.candles[_latestCandle+1].mid.o);
+
+      // this.figureMatrix.tradePosition.writePosition(
+      //   this.time,
+      //   columnID, 
+      //   sign.row,        
+      //   "Sell",
+      //   TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o);
+      // console.log("ENTRY ",this.time,columnID,sign.row,"Sell",TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o);
       
     }
   }
   else if (this.figureMatrix.tradePosition.bs == "Buy"){
     if(sign.sign == "Sell"){
       //exit
-      this.figureMatrix.tradePosition.writePosition(
-        this.time,
-        columnID, 
-        sign.row,
-        "",
-        TRADE_AMOUNT, 
-        marketData.candles[_latestCandle+1].mid.o
-        );
-      console.log("EXIT ",this.time,columnID,sign.row,"Sell",TRADE_AMOUNT, 
+      this.figureMatrix.tradePosition.exit(
+        "Sell", this.time, columnID, sign.row, 
         marketData.candles[_latestCandle+1].mid.o);
+
+      // this.figureMatrix.tradePosition.writePosition(
+      //   this.time,
+      //   columnID, 
+      //   sign.row,
+      //   "",
+      //   TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o
+      //   );
+      // console.log("EXIT ",this.time,columnID,sign.row,"Sell",TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o);
     }
   }
   else if (this.figureMatrix.tradePosition.bs == "Sell"){
     if(sign.sign == "Buy"){
       //exit
-      this.figureMatrix.tradePosition.writePosition(
-        this.time,
-        columnID, 
-        sign.row,
-        "",
-        TRADE_AMOUNT, 
-        marketData.candles[_latestCandle+1].mid.o
-        );
-      console.log("EXIT ",this.time,columnID,"Buy",TRADE_AMOUNT, 
+      this.figureMatrix.tradePosition.exit(
+        "Buy", this.time, columnID, sign.row, 
         marketData.candles[_latestCandle+1].mid.o);
+
+      // this.figureMatrix.tradePosition.writePosition(
+      //   this.time,
+      //   columnID, 
+      //   sign.row,
+      //   "",
+      //   TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o
+      //   );
+      // console.log("EXIT ",this.time,columnID,sign.row,"Buy",TRADE_AMOUNT, 
+      //   marketData.candles[_latestCandle+1].mid.o);
     }
   }
 
@@ -648,6 +738,22 @@ function setup() {
   marketData.initParam();
   console.log(marketData);
 
+  //Generate TradeRecord
+  var newRecord = new TradeRecord();
+  newRecord.pair = "";
+  newRecord.bs = "";
+  newRecord.entryDate = "";
+  newRecord.entryPrice = "";
+  newRecord.amount = "";
+  newRecord.exitDate = "";
+  newRecord.exitPrice = "";
+  newRecord.fee = "";
+  newRecord.profitLoss = "";
+  newRecord.balance = INITIAL_DEPOSIT;
+  tradeRecords.push(newRecord);
+
+
+
   //FigureMatrix
   var snapshot = new SnapShot(marketData.candles[0].time);
   snapshot.generateFirstSnapShot();
@@ -660,6 +766,7 @@ function setup() {
   }
 
   console.log(snapShots);
+  console.log(tradeRecords);
 
   //Generate PaFi Canvas
 
