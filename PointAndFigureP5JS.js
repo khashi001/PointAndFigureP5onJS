@@ -4,7 +4,8 @@ var jsonPafiParameter;
 //Instances
 var marketData;
 var paFiCanvas;
-var snapShots= [];
+var snapShots = [];
+// var this.figureMatrix.tradePosition;
 //Constants
 var MARGIN_ROW = 2;
 var MARGIN_YAXIS_LABEL = 30;
@@ -13,8 +14,13 @@ var MARGIN_XCELL = 2;
 var PAFI_CELL_SIZE = 10;
 var PAFI_COLUMN_NUM = 100; //tekitou
 var MARGIN_RIGHT_COLUMN = 2;
+var TRADE_AMOUNT = 10; //tekitou
 //Iteration
 var snapIterator = 0;
+var aPressed = 0;
+var nPressed = 0;
+var sPressed = 0;
+
 //Debug 
 var debug_updateColumnNum = 0;
 var debug_updateFigureMatrix = 0;
@@ -24,6 +30,9 @@ var debug_copyLatestSnapShot = 0;
 var debug_getLastRowNum = 0;
 var debug_drawMatrix = 0;
 var debug_snapShotID = 340;
+var debug_writePosition = 0;
+var debug_generateFirstSnapShot = 1;
+var debug_snapIterator = 0;
 
 // Market Data Class
 MarketData = function(){
@@ -101,6 +110,14 @@ PaFiCanvas.prototype.updateWidth = function(){
   console.log(" this.width="+this.width);
 }
 
+PaFiCanvas.prototype.drawLatestDate = function(snapID){
+  textSize(30);
+  stroke(201,235,139);
+  fill(201,235,139);
+  text(snapShots[snapID].time, this.width*0.1, MARGIN_TITLE_BAR*1.6);
+
+}
+
 PaFiCanvas.prototype.drawframe = function(){
   var i,x1=0,x2=0,y1=0,y2=0;
   //rows
@@ -138,7 +155,7 @@ PaFiCanvas.prototype.drawframe = function(){
   text(marketData.instrument, this.width*0.1, MARGIN_TITLE_BAR*0.6);
   text(marketData.granularity, this.width*0.3, MARGIN_TITLE_BAR*0.6);
 
-  //Date
+  //Start and End date
   textSize(20);
   text(marketData.candles[0].time, this.width*0.4, MARGIN_TITLE_BAR*0.45);
   text(marketData.candles[marketData.candles.length-1].time, this.width*0.4, MARGIN_TITLE_BAR*0.90);
@@ -159,6 +176,18 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
 
 };
 
+PaFiCanvas.prototype.drawSigns = function(snapID){
+  var row = snapShots[snapID].figureMatrix.tradePosition.row;
+  var column = snapShots[snapID].figureMatrix.tradePosition.columnID;
+  var c = color(244,35,114,100);
+  stroke(c);
+  fill(c);
+
+  rect(this.getCanvasXaxis(column),this.getCanvasYaxis(row),PAFI_CELL_SIZE,PAFI_CELL_SIZE);
+
+
+}
+
 PaFiCanvas.prototype.getCanvasXaxis = function(_column){
   return MARGIN_YAXIS_LABEL + PAFI_CELL_SIZE * _column + MARGIN_XCELL;
 };
@@ -166,6 +195,27 @@ PaFiCanvas.prototype.getCanvasXaxis = function(_column){
 PaFiCanvas.prototype.getCanvasYaxis = function(_row){
   return  MARGIN_TITLE_BAR + PAFI_CELL_SIZE*(marketData.numOfRows - _row);
 };
+
+// Trade Position Class
+TradePosition = function(){
+  this.date="";
+  this.columnID=0;
+  this.row=0;
+  this.bs= "";
+  this.amount=0;
+  this.price=0;
+}
+
+TradePosition.prototype.writePosition = function( _date, _columnID, _row, _bs, _amount, _price){
+  this.date = _date;
+  this.columnID = _columnID;
+  this.row = _row;
+  this.bs = _bs;
+  this.amount = _amount;
+  this.price = _price;
+  if(debug_writePosition){console.log("writePosition. ",_date, _columnID, _row, _bs, _amount, _price);}
+}
+
 
 // SanpShots Class
 FigureCell = function(){
@@ -179,6 +229,7 @@ FigureColumn = function(){
 
 FigureMatrix = function(){
   this.columns = [];
+  this.tradePosition;
 };
 
 
@@ -190,9 +241,11 @@ SnapShot = function(_time){
 
 };
 
+
 SnapShot.prototype.generateFirstSnapShot = function(){
   console.log("generateFirstSnapShot started.");
   var newFigureMatrix = new FigureMatrix();
+  var newTradePosition = new TradePosition();
   var newColumn = this.generateNewColumn();
 
   //set default value
@@ -204,17 +257,20 @@ SnapShot.prototype.generateFirstSnapShot = function(){
   newFigureMatrix.columns.push(newColumn);
 
   this.figureMatrix = newFigureMatrix;
+  this.figureMatrix.tradePosition = newTradePosition;
   this.trend = "Up";
 
-  // console.log(this.figureMatrix);
-  // console.log("generateFirstSnapShot done.");
-
+  if(debug_generateFirstSnapShot){
+    console.log(this);
+    console.log("generateFirstSnapShot done.");
+  }
 
 };
 
 
 SnapShot.prototype.copyLatestSnapShot = function(){
   var newFigureMatrix = new FigureMatrix();
+  var newTradePosition = new TradePosition();
   var lastSnapShotID = snapShots.length-1;
   if(debug_copyLatestSnapShot){console.log("copyLatestSnapShot started.");}
   if(debug_copyLatestSnapShot){console.log(lastSnapShotID);}
@@ -235,15 +291,26 @@ SnapShot.prototype.copyLatestSnapShot = function(){
     newFigureMatrix.columns.push(newColumn);
   }
   this.figureMatrix = newFigureMatrix;
+
+  newTradePosition.writePosition(
+                snapShots[lastSnapShotID].figureMatrix.tradePosition.date,
+                snapShots[lastSnapShotID].figureMatrix.tradePosition.columnID,
+                snapShots[lastSnapShotID].figureMatrix.tradePosition.row,
+                snapShots[lastSnapShotID].figureMatrix.tradePosition.bs,
+                snapShots[lastSnapShotID].figureMatrix.tradePosition.amount,
+                snapShots[lastSnapShotID].figureMatrix.tradePosition.price
+    );
+
+  this.figureMatrix.tradePosition = newTradePosition;
   this.trend = snapShots[lastSnapShotID].trend;
-  // console.log("copyLatestSnapShot done.");
+
+  if(debug_copyLatestSnapShot){console.log(this);}
 };
 
-SnapShot.prototype.getLastRowNum = function(){
+SnapShot.prototype.getLastRowNum = function(_columnID){
   var row = 0;
-  var lastColumnID = this.figureMatrix.columns.length-1;
-  var lastColumn = this.figureMatrix.columns[lastColumnID];
-  if(lastColumn.cellss[0].symbol == "O"){
+  var lastColumn = this.figureMatrix.columns[_columnID];
+  if(this.figureMatrix.columns[_columnID].cellss[0].symbol == "O"){
     row = 0;
   }
   else if(lastColumn.cellss[marketData.numOfRows-1].symbol == "X"){
@@ -273,7 +340,8 @@ SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
   var lastPrice = marketData.candles[_latestCandle-1].mid.c;
   var newPrice = marketData.candles[_latestCandle].mid.c;
 
-  var lastPriceRowNum = this.getLastRowNum();
+  var lastColumnID = this.figureMatrix.columns.length-1;
+  var lastPriceRowNum = this.getLastRowNum(lastColumnID);
   // var lastPriceRowNum = marketData.getRowNum(lastPrice);
   var newPriceRowNum = marketData.getRowNum(newPrice);
   if(_latestCandle <= debug_snapShotID){
@@ -391,6 +459,10 @@ SnapShot.prototype.generateLatestSnapShot = function(_latestCandle){
   this.copyLatestSnapShot();
   //update
   this.updateFigureMatrix(_latestCandle);
+  //trade
+  if(snapShots[snapShots.length-1].figureMatrix.columns.length >= 4){
+    this.trade(_latestCandle);
+  }
 }
 
 SnapShot.prototype.writeRangeCells = function(_column, _fromRow, _toRow, _symbol){
@@ -454,6 +526,112 @@ SnapShot.prototype.writeMergedCell = function(_column, _row, _symbol){
 
 }
 
+TradeSign = function(){
+  this.sign="";
+  this.row=0;
+}
+
+
+SnapShot.prototype.trade = function(_latestCandle){
+  var columnID = this.figureMatrix.columns.length-1;
+  var sign = new TradeSign();
+  sign = this.checkFigureSign();
+
+  if (this.figureMatrix.tradePosition.bs == ""){
+    if(sign.sign == "Buy"){
+      //entry(Buy)
+      this.figureMatrix.tradePosition.writePosition(
+        this.time,
+        columnID, 
+        sign.row,
+        "Buy",
+        TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o);
+      console.log("ENTRY ",this.time, columnID,sign.row,"Buy",TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o);
+    }
+    else if (sign.sign == "Sell"){
+      //entry(sell)
+      this.figureMatrix.tradePosition.writePosition(
+        this.time,
+        columnID, 
+        sign.row,        
+        "Sell",
+        TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o);
+      console.log("ENTRY ",this.time,columnID,sign.row,"Sell",TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o);
+      
+    }
+  }
+  else if (this.figureMatrix.tradePosition.bs == "Buy"){
+    if(sign.sign == "Sell"){
+      //exit
+      this.figureMatrix.tradePosition.writePosition(
+        this.time,
+        columnID, 
+        sign.row,
+        "",
+        TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o
+        );
+      console.log("EXIT ",this.time,columnID,sign.row,"Sell",TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o);
+    }
+  }
+  else if (this.figureMatrix.tradePosition.bs == "Sell"){
+    if(sign.sign == "Buy"){
+      //exit
+      this.figureMatrix.tradePosition.writePosition(
+        this.time,
+        columnID, 
+        sign.row,
+        "",
+        TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o
+        );
+      console.log("EXIT ",this.time,columnID,"Buy",TRADE_AMOUNT, 
+        marketData.candles[_latestCandle+1].mid.o);
+    }
+  }
+
+}
+
+SnapShot.prototype.checkFigureSign = function(){
+  var sign = new TradeSign();
+  var latestColumnID = this.figureMatrix.columns.length-1;
+  var SecondPreviousColumnID = latestColumnID - 2;
+  var latestEdgeRow = this.getLastRowNum(latestColumnID);
+  var SecondPreviousEdgeRow = this.getLastRowNum(SecondPreviousColumnID);
+
+  // Rule 1: Simple Rule
+  // if O (down trend) 
+  //   compare lowest rows: latest column and 2 columns before
+  //   if latest column's row is lower than before 
+  //     Sell sign is ON 
+  if(this.trend == "Down"){
+    if(latestEdgeRow < SecondPreviousEdgeRow){
+      sign.sign = "Sell";
+      sign.row = latestEdgeRow;
+    }
+  }
+
+  // if X (up trend) 
+  //   compare highest rows: latest column and 2 columns before
+  //   if latest column's row is higher than before 
+  //     Buy sign is ON 
+  if(this.trend == "Up"){
+    if(latestEdgeRow > SecondPreviousEdgeRow){
+      sign.sign = "Buy";
+      sign.row = latestEdgeRow;
+    }
+  }
+  return sign;
+}
+
+
+
+
 //Main
 
 function preload(){
@@ -481,7 +659,6 @@ function setup() {
     snapShots.push(snapshot);
   }
 
-
   console.log(snapShots);
 
   //Generate PaFi Canvas
@@ -497,19 +674,56 @@ function setup() {
 }
 
 function draw() {
+  background(10,10,10);
   //frame
   paFiCanvas.drawframe();
 
-  //FigureMatrix
-  if(snapIterator < marketData.candles.length){
-  // if(snapIterator > debug_snapShotID-3 && snapIterator < debug_snapShotID+1){
-    console.log("===== "+snapIterator+" =====");
-    paFiCanvas.drawMatrix(snapIterator);    
+
+  //if nPressed then refresh screen and wait for next keyPress
+  //if sPressed then start automatic drawing 
+  //if aPressed then draw snapshot of "aPressed"
+  if (nPressed){
+    aPressed = 0;
+    sPressed = 0;
+    nPressed = 0;
+    snapIterator = 0;
   }
-  if(snapIterator < marketData.candles.length){
-    snapIterator++;
+  else if (sPressed){
+    //FigureMatrix
+    if(snapIterator < marketData.candles.length){
+    // if(snapIterator > debug_snapShotID-3 && snapIterator < debug_snapShotID+1){
+      if(debug_snapIterator){console.log("===== "+snapIterator+" =====");}
+        //SnapShot Date
+      paFiCanvas.drawMatrix(snapIterator);
+      paFiCanvas.drawSigns(snapIterator);
+      paFiCanvas.drawLatestDate(snapIterator);
+    }
+    if(snapIterator < marketData.candles.length){
+      snapIterator++;
+    }
+    else if (snapIterator == marketData.candles.length){
+      console.log("Iteration done.");
+    }    
   }
-  else if (snapIterator == marketData.candles.length){
-    console.log("Iteration done.");
+  else if (aPressed){
+    paFiCanvas.drawMatrix(aPressed);
+    paFiCanvas.drawSigns(aPressed);
+    paFiCanvas.drawLatestDate(aPressed);
   }
+
+}
+
+
+function keyTyped(){
+  console.log("keyTyped.",key);
+  if(key == "a"){
+    aPressed++;
+  }
+  else if (key == "n"){
+    nPressed=1;
+  }
+  else if (key == "s"){
+    sPressed=1;
+  }
+
 }
