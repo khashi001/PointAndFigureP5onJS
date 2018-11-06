@@ -17,10 +17,11 @@ var PAFI_COLUMN_NUM = 100; //tekitou
 var MARGIN_RIGHT_COLUMN = 2;
 var TRADE_AMOUNT = 10000; // DMM FX
 var TRADE_FEE_RATE = 0.00002; //DMM FX
-var INITIAL_DEPOSIT = 5000000;
+var INITIAL_DEPOSIT = 50000;
 var X_LITTLE_MERGIN = 2;
 var LOSSCUT_RATE = 0.001;
 var FRAME_RATE = 10;
+var MARKET_DATA_FILE = "GBP_USD_D.json";
 //Iteration
 var snapIterator = 0;
 var aPressed = 0;
@@ -41,6 +42,7 @@ var debug_generateFirstSnapShot = 0;
 var debug_snapIterator = 0;
 var debug_exit = 0;
 var debug_entry = 0;
+var debug_LossCut = 1;
 
 // Market Data Class
 MarketData = function(){
@@ -428,6 +430,9 @@ SnapShot.prototype.copyLatestSnapShot = function(){
 };
 
 SnapShot.prototype.getLastRowNum = function(_columnID){
+  if(_columnID == 9){
+    console.log(snapShots.length-1, _columnID);
+  } 
   var row = 0;
   var lastColumn = this.figureMatrix.columns[_columnID];
   if(this.figureMatrix.columns[_columnID].cellss[0].symbol == "O"){
@@ -580,7 +585,7 @@ SnapShot.prototype.generateLatestSnapShot = function(_latestCandle){
   //update
   this.updateFigureMatrix(_latestCandle);
   //trade
-  if(snapShots[snapShots.length-1].figureMatrix.columns.length >=2){
+  if(snapShots[snapShots.length-1].figureMatrix.columns.length >2){
     this.trade(_latestCandle);
   }
 }
@@ -782,7 +787,7 @@ SnapShot.prototype.checkFigureSign = function(){
 
 function preload(){
   jsonPafiParameter = loadJSON('PafiParameter.json');
-  jsonMarketData = loadJSON('USD_JPY_D.json');
+  jsonMarketData = loadJSON(MARKET_DATA_FILE);
 }
 
 function setup() {  
