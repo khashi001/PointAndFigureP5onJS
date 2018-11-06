@@ -19,6 +19,8 @@ var TRADE_AMOUNT = 10000; // DMM FX
 var TRADE_FEE_RATE = 0.00002; //DMM FX
 var INITIAL_DEPOSIT = 5000000;
 var X_LITTLE_MERGIN = 2;
+var LOSSCUT_RATE = 0.001;
+var FRAME_RATE = 10;
 //Iteration
 var snapIterator = 0;
 var aPressed = 0;
@@ -35,8 +37,10 @@ var debug_getLastRowNum = 0;
 var debug_drawMatrix = 0;
 var debug_snapShotID = 340;
 var debug_writePosition = 0;
-var debug_generateFirstSnapShot = 1;
+var debug_generateFirstSnapShot = 0;
 var debug_snapIterator = 0;
+var debug_exit = 0;
+var debug_entry = 0;
 
 // Market Data Class
 MarketData = function(){
@@ -105,13 +109,13 @@ MarketData.prototype.updateColumnNum = function(){
 PaFiCanvas = function(){
   this.height = PAFI_CELL_SIZE*marketData.numOfRows+MARGIN_TITLE_BAR;
   this.width = PAFI_CELL_SIZE*marketData.columnNum+MARGIN_YAXIS_LABEL+MARGIN_RIGHT_COLUMN;
-  console.log("PaFiCanvas: ",marketData.numOfRows,this.height);
+  // console.log("PaFiCanvas: ",marketData.numOfRows,this.height);
 }
 
 PaFiCanvas.prototype.updateWidth = function(){
   console.log("updateWidth");
   this.width = PAFI_CELL_SIZE*marketData.columnNum+MARGIN_YAXIS_LABEL;
-  console.log(" this.width="+this.width);
+  // console.log(" this.width="+this.width);
 }
 
 PaFiCanvas.prototype.drawLatestDate = function(snapID){
@@ -171,6 +175,7 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
   var blue = color(104,216,239,255);
   var pink = color(225,32,103,225);
   var green = color(109,149,32,225);
+  var purple = color(172,128,255);
   textSize(10);
   var latestFigureMatrix = snapShots[snapID].figureMatrix;
   for(var column=0; column < latestFigureMatrix.columns.length; column++){
@@ -179,10 +184,7 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
       stroke(blue);
       fill(blue);
       var symbol = latestFigureMatrix.columns[column].cellss[row].symbol;
-      if(snapID==139 && column == 44 && row == 63){
-        console.log("koko3");
-      }
-      text(symbol, this.getCanvasXaxis(column),this.getCanvasYaxis(row));
+      text(symbol, this.getCanvasXaxis(column),this.getCanvasTextYaxis(row));
       if(debug_drawMatrix){if(column==93 && symbol != ""){console.log(column,row,symbol);}}
 
       // sign
@@ -200,6 +202,19 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
         // arc(this.getCanvasXaxis(column)+PAFI_CELL_SIZE/2,this.getCanvasYaxis(row)-PAFI_CELL_SIZE/2,PAFI_CELL_SIZE,PAFI_CELL_SIZE,
         //   0, PI + QUARTER_PI);
         rect(this.getCanvasXaxis(column)+PAFI_CELL_SIZE/2-X_LITTLE_MERGIN,this.getCanvasYaxis(row),PAFI_CELL_SIZE/2,PAFI_CELL_SIZE);
+      }
+      if(comment.match("LossCut")){
+      // else if(comment == "Exit"){
+        stroke(purple);
+        fill(purple);
+        arc(
+          this.getCanvasXaxis(column)+X_LITTLE_MERGIN+PAFI_CELL_SIZE/4,
+          this.getCanvasYaxis(row)+PAFI_CELL_SIZE/2,
+          PAFI_CELL_SIZE,
+          PAFI_CELL_SIZE,
+          0, 
+          PI + QUARTER_PI);
+        // rect(this.getCanvasXaxis(column)+PAFI_CELL_SIZE/2-X_LITTLE_MERGIN,this.getCanvasYaxis(row),PAFI_CELL_SIZE/2,PAFI_CELL_SIZE);
       }
     }
   }
@@ -226,6 +241,10 @@ PaFiCanvas.prototype.getCanvasXaxis = function(_column){
 
 PaFiCanvas.prototype.getCanvasYaxis = function(_row){
   return  MARGIN_TITLE_BAR + PAFI_CELL_SIZE*(marketData.numOfRows - _row - 1);
+};
+
+PaFiCanvas.prototype.getCanvasTextYaxis = function(_row){
+  return  MARGIN_TITLE_BAR + PAFI_CELL_SIZE*(marketData.numOfRows - _row);
 };
 
 // Trade Position Class
@@ -270,12 +289,10 @@ TradePosition.prototype.entry = function(_sign, _time, _columnID, _row, _price){
   newRecord.exitPrice = 0;
   newRecord.fee = _price * TRADE_AMOUNT * TRADE_FEE_RATE;
   newRecord.profitLoss = 0;
-  newRecord.balance = 
-    tradeRecords[tradeRecords.length-1].balance - 
-    (_price * TRADE_AMOUNT + newRecord.fee);
+  newRecord.balance = tradeRecords[tradeRecords.length-1].balance;
 
   tradeRecords.push(newRecord);
-  console.log("ENTRY ",_sign,_time,_columnID,_row,_price);
+  if(debug_entry){console.log("ENTRY ",_sign,_time,_columnID,_row,_price);}
   
 }
 
@@ -295,14 +312,14 @@ TradePosition.prototype.exit = function(_sign, _time, _columnID, _row, _price){
   record.exitPrice = _price;
   record.fee = record.fee + _price * TRADE_AMOUNT * TRADE_FEE_RATE;
   if(_sign == "Buy"){
-    record.profitLoss = (record.exitPrice - record.entryPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
-  }
-  else{
     record.profitLoss = (record.entryPrice - record.exitPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
   }
-  record.balance = record.balance + (_price * TRADE_AMOUNT) - record.fee;
+  else{
+    record.profitLoss = (record.exitPrice - record.entryPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
+  }
+  record.balance = record.balance +  record.profitLoss - record.fee;
   
-  console.log("EXIT ",_sign,_time,_columnID,_row,_price);
+  if(debug_exit){console.log("EXIT ",_sign,_time,_columnID,_row,_price);}
 
 }
 
@@ -346,7 +363,7 @@ SnapShot = function(_time){
 
 
 SnapShot.prototype.generateFirstSnapShot = function(){
-  console.log("generateFirstSnapShot started.");
+  if(debug_generateFirstSnapShot){console.log("generateFirstSnapShot started.");}
   var newFigureMatrix = new FigureMatrix();
   var newTradePosition = new TradePosition();
   var newColumn = this.generateNewColumn();
@@ -389,9 +406,6 @@ SnapShot.prototype.copyLatestSnapShot = function(){
         snapShots[lastSnapShotID].figureMatrix.columns[i].cellss[j].symbol;
       newCell.comment = 
         snapShots[lastSnapShotID].figureMatrix.columns[i].cellss[j].comment;
-        if(lastSnapShotID == 139 && i == 44 && j > 62 && j < 65){
-          console.log ("koko");
-        }
       newColumn.cellss.push(newCell);
     }    
     newFigureMatrix.columns.push(newColumn);
@@ -635,51 +649,93 @@ SnapShot.prototype.writeMergedCell = function(_column, _row, _symbol){
 TradeSign = function(){
   this.sign="";
   this.row=0;
+  this.previousRow=0;
 }
 
 
 
 SnapShot.prototype.trade = function(_latestCandle){
   var columnID = this.figureMatrix.columns.length-1;
+
+  //LossCut
+  if(this.figureMatrix.tradePosition.bs != ""){ //position exists
+    var latestPrice = marketData.candles[_latestCandle-1].mid.c;
+    var entryPrice = this.figureMatrix.tradePosition.price;
+    if( (this.figureMatrix.tradePosition.bs == "Buy") && 
+        ((latestPrice - entryPrice)*TRADE_AMOUNT < (INITIAL_DEPOSIT*LOSSCUT_RATE)*(-1))
+        ){
+      //Forced Loss Cut
+      this.figureMatrix.tradePosition.exit(
+        "Sell", this.time, columnID, marketData.getRowNum(latestPrice),
+        latestPrice);
+      this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment = 
+        this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment + "LossCut";
+      return;
+    }    
+    else if( (this.figureMatrix.tradePosition.bs == "Sell") && 
+        ((entryPrice - latestPrice)*TRADE_AMOUNT < (INITIAL_DEPOSIT*LOSSCUT_RATE)*(-1))
+        ){
+      //Forced Loss Cut
+      this.figureMatrix.tradePosition.exit(
+        "Buy", this.time, columnID, marketData.getRowNum(latestPrice),
+        latestPrice);
+      this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment = 
+        this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment + "LossCut";
+      return;
+    }
+  }
+
+  //Entry,Exit
   var sign = new TradeSign();
   sign = this.checkFigureSign();
-
+  var entryPrice=0;
+  var exitPrice=0;
   if (this.figureMatrix.tradePosition.bs == ""){
     if(sign.sign == "Buy"){
       //entry(Buy)
+      entryPrice = (_latestCandle < marketData.candles.length-1)? 
+          // marketData.candles[_latestCandle+1].mid.o : 
+          parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row +1)*marketData.boxSize :
+          parseFloat(marketData.candles[_latestCandle].mid.c);
       this.figureMatrix.tradePosition.entry(
-        "Buy", this.time, columnID, sign.row, 
-        marketData.candles[_latestCandle+1].mid.o);
-      this.figureMatrix.columns[columnID].cellss[sign.row].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.row].comment + "Entry";
+        "Buy", this.time, columnID, sign.row, entryPrice);
+
+      this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment = 
+        this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment + "Entry";
     }
     else if (sign.sign == "Sell"){
       //entry(sell)
+      entryPrice = (_latestCandle < marketData.candles.length-1)? 
+          // marketData.candles[_latestCandle+1].mid.o : 
+          parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row -1)*marketData.boxSize :
+          parseFloat(marketData.candles[_latestCandle].mid.c);
       this.figureMatrix.tradePosition.entry(
-        "Sell", this.time, columnID, sign.row, 
-        marketData.candles[_latestCandle+1].mid.o);
-      this.figureMatrix.columns[columnID].cellss[sign.row].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.row].comment + "Entry";
+        "Sell", this.time, columnID, sign.row, entryPrice);
+      this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment = 
+        this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment + "Entry";
     }
   }
   else if (this.figureMatrix.tradePosition.bs == "Buy"){
     if(sign.sign == "Sell"){
       //exit
+      exitPrice = parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row-1)*marketData.boxSize;
+        // marketData.candles[_latestCandle+1].mid.o);
       this.figureMatrix.tradePosition.exit(
-        "Sell", this.time, columnID, sign.row, 
-        marketData.candles[_latestCandle+1].mid.o);
-      this.figureMatrix.columns[columnID].cellss[sign.row].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.row].comment + "Exit";
+        "Sell", this.time, columnID, sign.row, exitPrice);
+
+      this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment = 
+        this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment + "Exit";
     }
   }
   else if (this.figureMatrix.tradePosition.bs == "Sell"){
     if(sign.sign == "Buy"){
+      exitPrice = parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row+1)*marketData.boxSize;
+      // marketData.candles[_latestCandle+1].mid.o);
       //exit
       this.figureMatrix.tradePosition.exit(
-        "Buy", this.time, columnID, sign.row, 
-        marketData.candles[_latestCandle+1].mid.o);
-      this.figureMatrix.columns[columnID].cellss[sign.row].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.row].comment + "Exit";
+        "Buy", this.time, columnID, sign.row, exitPrice);
+      this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment = 
+        this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment + "Exit";
     }
   }
 
@@ -701,6 +757,7 @@ SnapShot.prototype.checkFigureSign = function(){
     if(latestEdgeRow < SecondPreviousEdgeRow){
       sign.sign = "Sell";
       sign.row = latestEdgeRow;
+      sign.previousRow = SecondPreviousEdgeRow;
     }
   }
 
@@ -712,6 +769,7 @@ SnapShot.prototype.checkFigureSign = function(){
     if(latestEdgeRow > SecondPreviousEdgeRow){
       sign.sign = "Buy";
       sign.row = latestEdgeRow;
+      sign.previousRow = SecondPreviousEdgeRow;
     }
   }
   return sign;
@@ -774,7 +832,7 @@ function setup() {
 
   createCanvas(paFiCanvas.width, paFiCanvas.height); 
   background(10,10,10);
-  frameRate(5);
+  frameRate(FRAME_RATE);
 
 }
 
@@ -787,12 +845,33 @@ function draw() {
 //debug: draw sample data for y-axis check
   stroke(255);
   fill(255);
-  var sampleRow = 140;
-  var sampleColumn = 1;
+  var sampleRow = marketData.numOfRows-1;
+  var sampleColumn = 0;
   rect(paFiCanvas.getCanvasXaxis(sampleColumn)-X_LITTLE_MERGIN,
        paFiCanvas.getCanvasYaxis(sampleRow),
        PAFI_CELL_SIZE,
        PAFI_CELL_SIZE);
+
+var purple = color(172,128,255);
+stroke(purple);
+fill(purple);
+arc(
+  paFiCanvas.getCanvasXaxis(sampleColumn)+X_LITTLE_MERGIN+PAFI_CELL_SIZE/4,
+  paFiCanvas.getCanvasYaxis(sampleRow)+PAFI_CELL_SIZE/2,
+  PAFI_CELL_SIZE,
+  PAFI_CELL_SIZE,
+  0, 
+  PI + QUARTER_PI
+  );
+
+var blue = color(104,216,239,255);
+stroke(blue);
+fill(blue);
+textSize(10);
+var latestFigureMatrix = snapShots[snapShots.length-1].figureMatrix;
+var symbol = latestFigureMatrix.columns[sampleColumn].cellss[sampleRow].symbol;
+text(symbol, paFiCanvas.getCanvasXaxis(sampleColumn),paFiCanvas.getCanvasTextYaxis(sampleRow));
+// 
 
 
 
@@ -829,9 +908,6 @@ function draw() {
     }    
   }
   else if (aPressed){
-    if(aPressed == 139){
-      console.log("koko2");
-    }
     paFiCanvas.drawMatrix(aPressed);
     // paFiCanvas.drawSigns(aPressed);
     paFiCanvas.drawLatestDate(aPressed);
@@ -841,7 +917,7 @@ function draw() {
 
 
 function keyTyped(){
-  console.log("keyTyped.",key);
+  // console.log("keyTyped.",key);
   if(key == "a"){
     aPressed++;
   }
