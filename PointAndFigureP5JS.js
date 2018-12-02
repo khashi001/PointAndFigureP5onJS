@@ -1,3 +1,5 @@
+var INSTRUMENT = "THIS_IS_INSTRUMENT_NAME";
+
 //json data
 var jsonMarketData;
 var jsonPafiParameter;
@@ -23,7 +25,8 @@ var INITIAL_DEPOSIT = 500000;
 var X_LITTLE_MERGIN = 2;
 var LOSSCUT_RATE = 0.1;
 var FRAME_RATE = 40;
-var MARKET_DATA_FILE = "GBP_USD_D.json";
+var MARKET_DATA_FILE = INSTRUMENT+'.json';
+var PAFI_PARAM_FILE = 'PafiParameter_'+INSTRUMENT+'.json';
 var MAGIC3 = 3;
 //Iteration
 var snapIterator = 0;
@@ -87,14 +90,14 @@ MarketData.prototype.getRowNum = function(_price){
 MarketData.prototype.makeScale = function(){
     
     for(var i=0; i<this.candles.length; i++){
-      if (this.maxPrice < this.candles[i].mid.h){
-        this.maxPrice = this.candles[i].mid.h;
+      if (this.maxPrice < parseFloat(this.candles[i].mid.h)){
+        this.maxPrice = parseFloat(this.candles[i].mid.h);
       }
       if (this.minPrice == 0){
-        this.minPrice = this.candles[i].mid.l;
+        this.minPrice = parseFloat(this.candles[i].mid.l);
       }
-      else if (this.minPrice > this.candles[i].mid.l){
-        this.minPrice = this.candles[i].mid.l;
+      else if (this.minPrice > parseFloat(this.candles[i].mid.l)){
+        this.minPrice = parseFloat(this.candles[i].mid.l);
       }      
     }
     this.numOfRows = MARGIN_ROW + parseInt((this.maxPrice - this.minPrice)/this.boxSize);
@@ -112,7 +115,7 @@ MarketData.prototype.updateColumnNum = function(){
 }
 
 MarketData.prototype.getPrice = function(_row){
-  var price = parseFloat(_row * this.boxSize + this.minPrice + this.boxSize/2);
+  var price = parseFloat(_row * this.boxSize + parseFloat(this.minPrice) + this.boxSize/2);
   return price;
 }
 
@@ -208,7 +211,7 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
       // if(comment == "Entry"){
         stroke(pink);
         fill(pink);
-        rect(this.getCanvasXaxis(column)-X_LITTLE_MERGIN,this.getCanvasYaxis(row),PAFI_CELL_SIZE/2,PAFI_CELL_SIZE);
+        // rect(this.getCanvasXaxis(column)-X_LITTLE_MERGIN,this.getCanvasYaxis(row),PAFI_CELL_SIZE/2,PAFI_CELL_SIZE);
       }
       if(comment.match("Exit")){
       // else if(comment == "Exit"){
@@ -216,7 +219,7 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
         fill(green);
         // arc(this.getCanvasXaxis(column)+PAFI_CELL_SIZE/2,this.getCanvasYaxis(row)-PAFI_CELL_SIZE/2,PAFI_CELL_SIZE,PAFI_CELL_SIZE,
         //   0, PI + QUARTER_PI);
-        rect(this.getCanvasXaxis(column)+PAFI_CELL_SIZE/2-X_LITTLE_MERGIN,this.getCanvasYaxis(row),PAFI_CELL_SIZE/2,PAFI_CELL_SIZE);
+        // rect(this.getCanvasXaxis(column)+PAFI_CELL_SIZE/2-X_LITTLE_MERGIN,this.getCanvasYaxis(row),PAFI_CELL_SIZE/2,PAFI_CELL_SIZE);
       }
       if(comment.match("LossCut")){
       // else if(comment == "Exit"){
@@ -389,7 +392,7 @@ SnapShot.prototype.generateFirstSnapShot = function(){
   var newColumn = this.generateNewColumn();
 
   //set default value
-  var newPrice = marketData.candles[0].mid.c;
+  var newPrice = parseFloat(marketData.candles[0].mid.c);
   var newPriceRowNum = marketData.getRowNum(newPrice);
   newColumn.cellss[newPriceRowNum].symbol = "X";
   newColumn.cellss[newPriceRowNum].comment = "FirstData";
@@ -480,8 +483,8 @@ SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
     if(debug_updateFigureMatrix){console.log(_latestCandle+":updateFigureMatrix started.");}
   }
   //detect price change
-  var lastPrice = marketData.candles[_latestCandle-1].mid.c;
-  var newPrice = marketData.candles[_latestCandle].mid.c;
+  var lastPrice = parseFloat(marketData.candles[_latestCandle-1].mid.c);
+  var newPrice = parseFloat(marketData.candles[_latestCandle].mid.c);
 
   var lastColumnID = this.figureMatrix.columns.length-1;
   var lastPriceRowNum = this.getLastRowNum(lastColumnID);
@@ -682,7 +685,7 @@ SnapShot.prototype.trade = function(_latestCandle){
 
   //LossCut
   if(this.figureMatrix.tradePosition.bs != ""){ //position exists
-    var latestPrice = marketData.candles[_latestCandle-1].mid.c;
+    var latestPrice = parseFloat(marketData.candles[_latestCandle-1].mid.c);
     var entryPrice = this.figureMatrix.tradePosition.price;
     if( (this.figureMatrix.tradePosition.bs == "Buy") && 
         ((latestPrice - entryPrice)*TRADE_AMOUNT < (INITIAL_DEPOSIT*LOSSCUT_RATE)*(-1))
@@ -717,7 +720,6 @@ SnapShot.prototype.trade = function(_latestCandle){
     if(sign.sign == "Buy"){
       //entry(Buy)
       entryPrice = (_latestCandle < marketData.candles.length-1)? 
-          // marketData.candles[_latestCandle+1].mid.o : 
           parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row +1)*marketData.boxSize :
           parseFloat(marketData.candles[_latestCandle].mid.c);
       this.figureMatrix.tradePosition.entry(
@@ -729,7 +731,6 @@ SnapShot.prototype.trade = function(_latestCandle){
     else if (sign.sign == "Sell"){
       //entry(sell)
       entryPrice = (_latestCandle < marketData.candles.length-1)? 
-          // marketData.candles[_latestCandle+1].mid.o : 
           parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row -1)*marketData.boxSize :
           parseFloat(marketData.candles[_latestCandle].mid.c);
       this.figureMatrix.tradePosition.entry(
@@ -742,7 +743,6 @@ SnapShot.prototype.trade = function(_latestCandle){
     if(sign.sign == "Sell"){
       //exit
       exitPrice = parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row-1)*marketData.boxSize;
-        // marketData.candles[_latestCandle+1].mid.o);
       this.figureMatrix.tradePosition.exit(
         "Sell", this.time, columnID, sign.row, exitPrice);
 
@@ -875,6 +875,7 @@ Marker.prototype.drawMark = function(){
     textSize(15);
     strokeWeight(1);
     text(marketData.getPrice(rowID)+" :"+String(rowID),this.sx+30,this.sy-10);
+    line(this.sx,this.sy,this.sx+29,this.sy-9);
     console.log(marketData.getPrice(rowID),rowID);
     this.lifetime --;
   }
@@ -934,11 +935,10 @@ function mouseReleased() {
 
 
 
-
 //Main
 
 function preload(){
-  jsonPafiParameter = loadJSON('PafiParameter_GBP_USD_D.json');
+  jsonPafiParameter = loadJSON(PAFI_PARAM_FILE);
   jsonMarketData = loadJSON(MARKET_DATA_FILE);
 }
 
