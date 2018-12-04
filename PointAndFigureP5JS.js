@@ -1,4 +1,4 @@
-var INSTRUMENT = "THIS_IS_INSTRUMENT_NAME";
+var INSTRUMENT = "INSTRUMENT_NAME";
 
 //json data
 var jsonMarketData;
@@ -8,11 +8,14 @@ var marketData;
 var paFiCanvas;
 var snapShots = [];
 var tradeRecords = [];
+var tradeActions = [];
 var markers = [];
-// var this.figureMatrix.tradePosition;
+var balance = 0;
 //Constants
+var MAGIC3 = 3;
 var MARGIN_ROW = 2;
 var MARGIN_YAXIS_LABEL = 30;
+var BUTTON_SIZE = 26;
 var MARGIN_TITLE_BAR = 50;
 var MARGIN_XCELL = 4;
 var MARGIN_YCELL = 2;
@@ -21,19 +24,29 @@ var PAFI_COLUMN_NUM = 100; //tekitou
 var MARGIN_RIGHT_COLUMN = 2;
 var TRADE_AMOUNT = 3; // DMM FX
 var TRADE_FEE_RATE = 0.0002; //DMM FX
-var INITIAL_DEPOSIT = 500000;
+var INITIAL_DEPOSIT = 1000000; //kari
 var X_LITTLE_MERGIN = 2;
 var LOSSCUT_RATE = 0.1;
-var FRAME_RATE = 40;
+var FRAME_RATE = 30;
 var MARKET_DATA_FILE = INSTRUMENT+'.json';
 var PAFI_PARAM_FILE = 'PafiParameter_'+INSTRUMENT+'.json';
-var MAGIC3 = 3;
+var POSITION_MAX = 999; //available positions
+var POSITIONS = 3;
 //Iteration
 var snapIterator = 0;
 var aPressed = 0;
+var aPressedChecker = 0;
 var nPressed = 0;
 var sPressed = 0;
 var lPressed = 0;
+var onePressed = 0;
+var zeroPressed = 0;
+
+//Sync
+var arbitor = 0; //0: not used 1: used
+
+//Graphic
+var latestRectColumns = 0;
 
 //Debug 
 var debug_updateColumnNum = 0;
@@ -47,11 +60,10 @@ var debug_snapShotID = 340;
 var debug_writePosition = 0;
 var debug_generateFirstSnapShot = 0;
 var debug_snapIterator = 0;
-var debug_exit = 0;
-var debug_entry = 0;
-var debug_LossCut = 1;
+var debug_exit = 1;
+var debug_entry = 1;
+var debug_LossCut = 0;
 
-// Market Data Class
 MarketData = function(){
   this.instrument;
   this.granularity;
@@ -64,6 +76,7 @@ MarketData = function(){
   this.minPrice;
   this.numOfRows;
   this.columnNum;
+
   };
   
 MarketData.prototype.initParam = function(){
@@ -77,7 +90,6 @@ MarketData.prototype.initParam = function(){
   this.numOfRows = 0;
   this.columnNum = 0;
   this.makeScale();
-  
 };
 
 MarketData.prototype.getRowNum = function(_price){
@@ -85,7 +97,6 @@ MarketData.prototype.getRowNum = function(_price){
   // console.log("getRowNum: rowNum="+row+", _price="+_price+", boxSize="+this.boxSize);
   return row;
 }
-
 
 MarketData.prototype.makeScale = function(){
     
@@ -114,12 +125,92 @@ MarketData.prototype.updateColumnNum = function(){
   }
 }
 
-MarketData.prototype.getPrice = function(_row){
-  var price = parseFloat(_row * this.boxSize + parseFloat(this.minPrice) + this.boxSize/2);
+MarketData.prototype.getPrice = function(_row){ //Minimum Price of the Box
+  // var price = parseFloat(_row * this.boxSize + parseFloat(this.minPrice) + this.boxSize/2);
+  var price = parseFloat(_row * this.boxSize + parseFloat(this.minPrice));
   return price;
 }
 
 
+
+Marker = function(){
+  this.figure = ""; // Line / Rect
+  this.ID = 0;
+  this.sx = 0;
+  this.sy = 0;
+  this.dx = 0;
+  this.dy = 0;
+  this.columns = 0;
+  this.rownum = 0;
+  this.lifetime = 500;
+}
+
+Marker.prototype.getRowCount = function(){
+  var sRow = (this.sy - MARGIN_TITLE_BAR)/PAFI_CELL_SIZE;
+  sRow = parseInt(sRow);
+  var dRow = (this.dy - MARGIN_TITLE_BAR)/PAFI_CELL_SIZE;
+  dRow = parseInt(dRow);
+  var count = dRow - sRow -1;
+  // console.log("RowCount = ",count);
+  return count;
+}
+
+Marker.prototype.getRowID = function(_yaxis){
+  var rowID = paFiCanvas.getRowID(_yaxis);
+  return rowID;
+}
+
+
+Marker.prototype.getColumnCount = function(){
+  var sColumn = paFiCanvas.getColumnID(this.sx);
+  var dColumn = paFiCanvas.getColumnID(this.dx);
+  var count = dColumn - sColumn -1;
+  // console.log("ColumnCount = ",count);
+  return count;
+}
+
+Marker.prototype.getColor = function(_figure){
+  var mycolor;
+  if(_figure == "Line"){
+    mycolor = color(200,20,200);
+  }
+  else if(_figure == "Rect"){
+    mycolor = color(20,200,200);
+  }
+  else{
+    mycolor = color(250,200,200);
+  }
+  return mycolor;
+}
+
+Marker.prototype.drawMark = function(){
+  stroke(this.getColor(this.figure));
+  noFill();
+  strokeWeight(2);
+
+  if(this.figure == "Line"){
+    //TBD
+  }
+  else if (this.figure == "Rect"){
+    rect(this.sx,this.sy,
+        (this.dx-this.sx),(this.dy-this.sy)
+        );
+    var rowID = this.getRowID(this.dy);
+    var targetPriceRows = parseFloat(this.columns * MAGIC3*marketData.boxSize);
+    textSize(15);
+    strokeWeight(1);
+    text("C:"+String(this.columns)+" R:"+String(this.rownum)+" T:"+String(targetPriceRows),this.sx,this.sy-10);
+  }
+  else if (this.figure == "Price"){
+    var rowID = paFiCanvas.getRowID(this.sy);
+    textSize(15);
+    strokeWeight(1);
+    text(marketData.getPrice(rowID)+" :"+String(rowID),this.sx+30,this.sy-10);
+    line(this.sx,this.sy,this.sx+29,this.sy-9);
+    // console.log(marketData.getPrice(rowID),rowID);
+  }
+  this.lifetime --;
+}
 
 // PaFi Canvas Class
 PaFiCanvas = function(){
@@ -137,12 +228,14 @@ PaFiCanvas.prototype.updateWidth = function(){
 PaFiCanvas.prototype.drawLatestDate = function(snapID){
   textSize(30);
   stroke(201,235,139);
+  strokeWeight(1);
   fill(201,235,139);
   text(snapShots[snapID].time, this.width*0.1, MARGIN_TITLE_BAR*1.6);
 
 }
 
 PaFiCanvas.prototype.drawframe = function(){
+  strokeWeight(1);
   var i,x1=0,x2=0,y1=0,y2=0;
   //rows
   for(var i=0; i<marketData.numOfRows; i++){
@@ -175,11 +268,13 @@ PaFiCanvas.prototype.drawframe = function(){
   //Title
   textSize(30);
   stroke(101,215,239);
+  strokeWeight(1);
   fill(101,215,239);
   text(marketData.instrument, this.width*0.1, MARGIN_TITLE_BAR*0.6);
   text(marketData.granularity, this.width*0.3, MARGIN_TITLE_BAR*0.6);
   textSize(20);
   text("BoxSize = "+marketData.boxSize, this.width*0.1, MARGIN_TITLE_BAR*2.0);
+
 
   //Start and End date
   textSize(20);
@@ -189,8 +284,10 @@ PaFiCanvas.prototype.drawframe = function(){
 
 };
 
+
 PaFiCanvas.prototype.drawMatrix = function(snapID){
   var blue = color(104,216,239,255);
+
   var pink = color(225,32,103,225);
   var green = color(109,149,32,225);
   var purple = color(172,128,255);
@@ -201,10 +298,12 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
       // symbol
       stroke(blue);
       fill(blue);
+
+      // strokeWeight(1);
+
       var symbol = latestFigureMatrix.columns[column].cellss[row].symbol;
       text(symbol, this.getCanvasXaxis(column),this.getCanvasTextYaxis(row));
       if(debug_drawMatrix){if(column==93 && symbol != ""){console.log(column,row,symbol);}}
-
       // sign
       var comment = latestFigureMatrix.columns[column].cellss[row].comment;
       if(comment.match("Entry")){
@@ -234,24 +333,113 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
           PI + QUARTER_PI);
         // rect(this.getCanvasXaxis(column)+PAFI_CELL_SIZE/2-X_LITTLE_MERGIN,this.getCanvasYaxis(row),PAFI_CELL_SIZE/2,PAFI_CELL_SIZE);
       }
+
     }
   }
 
 };
 
-/*
-PaFiCanvas.prototype.drawSigns = function(snapID){
-  var row = snapShots[snapID].figureMatrix.tradePosition.row;
-  var column = snapShots[snapID].figureMatrix.tradePosition.columnID;
-  var c = color(244,35,114,100);
-  stroke(c);
-  fill(c);
+PaFiCanvas.prototype.copyPosition = function(snapID){
+  if(snapID>0){
+    for(i=0;i<snapShots[snapID].figureMatrix.tradeBuyPosition.length;i++){
+      var position = snapShots[snapID].figureMatrix.tradeBuyPosition[i];
+      var previousPosition = snapShots[snapID-1].figureMatrix.tradeBuyPosition[i];
+      this.copyPotisionContents(previousPosition, position);      
+    }
+    for(i=0;i<snapShots[snapID].figureMatrix.tradeSellPosition.length;i++){
+      var position = snapShots[snapID].figureMatrix.tradeSellPosition[i];
+      var previousPosition = snapShots[snapID-1].figureMatrix.tradeSellPosition[i];
+      this.copyPotisionContents(previousPosition, position);
+    }
+  }
+}
 
-  rect(this.getCanvasXaxis(column),this.getCanvasYaxis(row),PAFI_CELL_SIZE,PAFI_CELL_SIZE);
-
+PaFiCanvas.prototype.copyPotisionContents = function(from, to){
+  to.status=from.status;
+  to.bs=from.bs;
+  to.date=from.date;
+  to.columnID=from.columnID;
+  to.row=from.row;
+  to.amount=from.amount;
+  to.price=from.price;
+  to.priceObj=from.priceObj;
+  to.recordID=from.recordID;
 
 }
-*/
+
+PaFiCanvas.prototype.drawSigns = function(snapID){
+  var colorBuyEntry = color(255,0,0);
+  var colorBuyExit = color(255,192,203);
+  var colorBuyLossCut = color(186,85,211);
+  var colorSellEntry = color(0,255,0);
+  var colorSellExit = color(208,233,157);
+  var colorSellLossCut = color(28,211,209);
+  strokeWeight(1);
+  textSize(10);
+
+  var i=tradeRecords.length-1;
+  while(i>0){
+    var record = tradeRecords[i];
+    //Entry
+    var row = record.entryRow;
+    var column = record.entryColumnID;
+    var xAxis;
+    var yAxis;
+    if(record.bs == "Buy"){
+      stroke(colorBuyEntry);
+      fill(colorBuyEntry);
+      xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN;
+      yAxis = this.getCanvasYaxis(row);
+      rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);      
+    }
+    else if(record.bs == "Sell"){
+      stroke(colorSellEntry);
+      fill(colorSellEntry);
+      xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN+PAFI_CELL_SIZE/2;
+      yAxis = this.getCanvasYaxis(row);
+      rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);      
+    }
+    else{
+      console.log("Unexpedted value in drawSigns!");
+    }
+
+
+    //Exit
+    if(record.exitDate != ""){
+      var row = record.exitRow;
+      var column = record.exitColumnID;
+      var xAxis;
+      var yAxis;
+      if(record.bs == "Buy"){
+        if(record.losscut == "Yes"){
+          stroke(colorBuyLossCut);
+          fill(colorBuyLossCut);
+        }
+        else{
+          stroke(colorBuyExit);
+          fill(colorBuyExit);
+        }
+        xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN;
+        yAxis = this.getCanvasYaxis(row)+PAFI_CELL_SIZE/2;
+        rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);
+      }
+      else if(record.bs == "Sell"){
+        if(record.losscut == "Yes"){
+          stroke(colorSellLossCut);
+          fill(colorSellLossCut);
+        }
+        else{
+          stroke(colorSellExit);
+          fill(colorSellExit);          
+        }
+        xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN+PAFI_CELL_SIZE/2;
+        yAxis = this.getCanvasYaxis(row)+PAFI_CELL_SIZE/2;
+        rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);      
+      }
+    }
+    i--;
+  }
+}
 
 PaFiCanvas.prototype.getCanvasXaxis = function(_column){
   return MARGIN_YAXIS_LABEL + PAFI_CELL_SIZE * _column + MARGIN_XCELL;
@@ -265,41 +453,79 @@ PaFiCanvas.prototype.getCanvasTextYaxis = function(_row){
   return  MARGIN_TITLE_BAR + PAFI_CELL_SIZE*(marketData.numOfRows - _row);
 };
 
-PaFiCanvas.prototype.getRowNum = function(_yaxis){
+// PaFiCanvas.prototype.getRowNum = function(_yaxis){
+//   var row = marketData.numOfRows - ((_yaxis - MARGIN_TITLE_BAR)/PAFI_CELL_SIZE);
+//   return parseInt(row);
+// }
+
+PaFiCanvas.prototype.getRowID = function(_yaxis){
   var row = marketData.numOfRows - ((_yaxis - MARGIN_TITLE_BAR)/PAFI_CELL_SIZE);
   return parseInt(row);
 }
 
+
+PaFiCanvas.prototype.getColumnID = function(_xaxis){
+  var columnID = parseInt((_xaxis - MARGIN_YAXIS_LABEL)/PAFI_CELL_SIZE);
+  return columnID;
+}
+
 // Trade Position Class
 TradePosition = function(){
+  this.status= ""; //Open or null
+  this.bs="";
   this.date="";
   this.columnID=0;
   this.row=0;
-  this.bs= "";
   this.amount=0;
   this.price=0;
+  this.priceObj=0;
+  this.recordID=0;
 }
 
-TradePosition.prototype.writePosition = function( _date, _columnID, _row, _bs, _amount, _price){
+TradePosition.prototype.writePosition = function( 
+  _date,
+  _columnID,
+  _row,
+  _bs,
+  _amount,
+  _price,
+  _priceObj,
+  _status){
+
+  this.status = _status;
+  this.bs = _bs;
   this.date = _date;
   this.columnID = _columnID;
   this.row = _row;
-  this.bs = _bs;
   this.amount = _amount;
   this.price = _price;
-  if(debug_writePosition){console.log("writePosition. ",_date, _columnID, _row, _bs, _amount, _price);}
+  this.priceObj = _priceObj;
+  if(debug_writePosition){console.log("writePosition. ",_status, _bs, _date, _columnID, _row, _amount, _price,_priceObj);}
 }
 
-TradePosition.prototype.entry = function(_sign, _time, _columnID, _row, _price){
+TradePosition.prototype.copyPosition = function( _status, _bs, _date, _columnID, _row, _amount, _price, _priceObj,_recordID){
+  this.status = _status;
+  this.bs = _bs;
+  this.date = _date;
+  this.columnID = _columnID;
+  this.row = _row;
+  this.amount = _amount;
+  this.price = _price;
+  this.priceObj = _priceObj;
+  this.recordID = _recordID;
+}
 
-  //update position
+TradePosition.prototype.entry = function(_sign, _time, _columnID, _row, _price, _priceObj){
+    //update position
   this.writePosition(
     _time,
     _columnID, 
     _row,
     _sign,
     TRADE_AMOUNT, 
-    _price);
+    _price,
+    _priceObj,
+    "Open");
 
   //generate record
   var newRecord = new TradeRecord();
@@ -312,52 +538,95 @@ TradePosition.prototype.entry = function(_sign, _time, _columnID, _row, _price){
   newRecord.exitPrice = 0;
   newRecord.fee = _price * TRADE_AMOUNT * TRADE_FEE_RATE;
   newRecord.profitLoss = 0;
-  newRecord.balance = tradeRecords[tradeRecords.length-1].balance;
+  // newRecord.balance = tradeRecords[tradeRecords.length-1].balance;
+  newRecord.entryRow = _row;
+  newRecord.entryColumnID = _columnID;
 
   tradeRecords.push(newRecord);
-  if(debug_entry){console.log("ENTRY ",_sign,_time,_columnID,_row,_price);}
-  
+  if(debug_entry){console.log("ENTRY ",_sign,_time,_columnID,_row,_price,_priceObj);}
+
+  this.recordID = tradeRecords.length-1;
 }
 
 
-TradePosition.prototype.exit = function(_sign, _time, _columnID, _row, _price){
+TradePosition.prototype.exit = function(
+  _sign, _time, _columnID, _row, _price,_priceObj){
+
   this.writePosition(
     _time,
     _columnID, 
     _row,
-    "",
+    _sign,
     TRADE_AMOUNT, 
-    _price);
+    _price,
+    _priceObj,
+    "");
 
-  var record = tradeRecords[tradeRecords.length-1];
+
+  // var record = tradeRecords[tradeRecords.length-1];
+  var record = tradeRecords[this.recordID];
   record.exitDate = _time;
-  if(record.bs == _sign){ console.log("Unexpected Operation in TradePosition:exit.");}
+  if(record.bs != _sign){ 
+    console.log("Unexpected Operation in TradePosition:exit.");
+    return;
+  }
   record.exitPrice = _price;
   record.fee = record.fee + _price * TRADE_AMOUNT * TRADE_FEE_RATE;
   if(_sign == "Buy"){
-    record.profitLoss = (record.entryPrice - record.exitPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
-  }
-  else{
+
     record.profitLoss = (record.exitPrice - record.entryPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
   }
-  record.balance = record.balance +  record.profitLoss - record.fee;
-  
-  if(debug_exit){console.log("EXIT ",_sign,_time,_columnID,_row,_price);}
+  else{
+    record.profitLoss = (record.entryPrice - record.exitPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
 
+
+  }
+  balance = balance +  record.profitLoss - record.fee;
+  record.exitColumnID = _columnID;
+  record.exitRow = _row;
+
+  
+  if(debug_exit){console.log("EXIT ",balance,_sign,_time,_columnID,_row,_price);}
+
+  this.recordID = 0;
+
+}
+
+TradeAction = function(){
+  this.mouseX = 0;
+  this.mouseY = 0;
+  this.row = 0;
+  this.column = 0;
+  this.action = "";
+}
+
+TradeAction.prototype.initParam = function(_mouseX, _mouseY, _action){
+  this.mouseX = _mouseX;
+  this.mouseY = _mouseY;
+  this.row = paFiCanvas.getRowID(_mouseY);
+  this.column = paFiCanvas.getColumnID(_mouseX);
+  this.action = _action;
 }
 
 //Trade Record Class
 TradeRecord = function (){
-  this.pair;
-  this.bs;
-  this.entrydate;
-  this.entryPrice;
-  this.amount;
-  this.exitDate;
-  this.exitPrice;
-  this.fee;
-  this.profitLoss;
-  this.balance;
+  // this.status = ""; //null or OPEN
+  this.pair = "";
+  this.bs = "";
+  this.entrydate = "";
+  this.entryPrice = 0;
+  this.amount = 0;
+  this.exitDate = "";
+  this.exitPrice = 0;
+  this.fee = 0;
+
+  this.profitLoss = 0;
+  this.entryRow = 0;
+  this.entryColumnID = 0;
+  this.exitColumnID = 0;
+  this.exitRow = 0;
+  // this.losscut = "No";
+
 }
 
 // SanpShots Class
@@ -372,12 +641,34 @@ FigureColumn = function(){
 
 FigureMatrix = function(){
   this.columns = [];
-  this.tradePosition;
+  this.tradeBuyPosition = [];
+  this.tradeSellPosition = [];
 };
+FigureMatrix.prototype.getVacantPosisionID = function(_bs){
+  var positionID=POSITION_MAX;
+  var position;
+  if(_bs == "Buy"){
+    for(var i=0;i<this.tradeBuyPosition.length;i++){
+      if(this.tradeBuyPosition[i].status == ""){
+        positionID = i;
+        break;
+      }
+    }
+  }
+  else{
+    for(var i=0;i<this.tradeSellPosition.length;i++){
+      if(this.tradeSellPosition[i].status == ""){
+        positionID = i;
+        break;
+      }
+    }
+  }
+  return positionID; // POSITION_MAX if all positions already used
+}
 
 
-SnapShot = function(_time){
-  this.time = _time;
+SnapShot = function(_date){
+  this.time = _date;
   // this.priceChange = "Default";
   this.trend = "Default";
   this.figureMatrix;
@@ -388,7 +679,6 @@ SnapShot = function(_time){
 SnapShot.prototype.generateFirstSnapShot = function(){
   if(debug_generateFirstSnapShot){console.log("generateFirstSnapShot started.");}
   var newFigureMatrix = new FigureMatrix();
-  var newTradePosition = new TradePosition();
   var newColumn = this.generateNewColumn();
 
   //set default value
@@ -400,7 +690,12 @@ SnapShot.prototype.generateFirstSnapShot = function(){
   newFigureMatrix.columns.push(newColumn);
 
   this.figureMatrix = newFigureMatrix;
-  this.figureMatrix.tradePosition = newTradePosition;
+  for(var i=0;i<POSITIONS;i++){
+    var newBuyPosition = new TradePosition("Buy");
+    var newSellPosition = new TradePosition("Sell");
+    this.figureMatrix.tradeBuyPosition.push(newBuyPosition);
+    this.figureMatrix.tradeSellPosition.push(newSellPosition);    
+  }
   this.trend = "Up";
 
   if(debug_generateFirstSnapShot){
@@ -413,7 +708,7 @@ SnapShot.prototype.generateFirstSnapShot = function(){
 
 SnapShot.prototype.copyLatestSnapShot = function(){
   var newFigureMatrix = new FigureMatrix();
-  var newTradePosition = new TradePosition();
+
   var lastSnapShotID = snapShots.length-1;
   if(debug_copyLatestSnapShot){console.log("copyLatestSnapShot started.");}
   if(debug_copyLatestSnapShot){console.log(lastSnapShotID);}
@@ -433,27 +728,46 @@ SnapShot.prototype.copyLatestSnapShot = function(){
     }    
     newFigureMatrix.columns.push(newColumn);
   }
+  for(var i=0;i<POSITIONS;i++){
+    var newBuyPosition = new TradePosition("Buy");
+    newBuyPosition.copyPosition(
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].status,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].bs,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].date,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].columnID,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].row,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].amount,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].price,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].priceObj,
+      snapShots[lastSnapShotID].figureMatrix.tradeBuyPosition[i].recordID
+      );
+
+    var newSellPosition = new TradePosition("Sell");
+    newSellPosition.copyPosition(
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].status,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].bs,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].date,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].columnID,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].row,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].amount,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].price,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].priceObj,
+      snapShots[lastSnapShotID].figureMatrix.tradeSellPosition[i].recordID
+      );
+
+    newFigureMatrix.tradeBuyPosition.push(newBuyPosition);
+    newFigureMatrix.tradeSellPosition.push(newSellPosition);
+  }
+
   this.figureMatrix = newFigureMatrix;
 
-  newTradePosition.writePosition(
-                snapShots[lastSnapShotID].figureMatrix.tradePosition.date,
-                snapShots[lastSnapShotID].figureMatrix.tradePosition.columnID,
-                snapShots[lastSnapShotID].figureMatrix.tradePosition.row,
-                snapShots[lastSnapShotID].figureMatrix.tradePosition.bs,
-                snapShots[lastSnapShotID].figureMatrix.tradePosition.amount,
-                snapShots[lastSnapShotID].figureMatrix.tradePosition.price
-    );
 
-  this.figureMatrix.tradePosition = newTradePosition;
   this.trend = snapShots[lastSnapShotID].trend;
 
   if(debug_copyLatestSnapShot){console.log(this);}
 };
 
 SnapShot.prototype.getLastRowNum = function(_columnID){
-  if(_columnID == 9){
-    // console.log(snapShots.length-1, _columnID);
-  } 
   var row = 0;
   var lastColumn = this.figureMatrix.columns[_columnID];
   if(this.figureMatrix.columns[_columnID].cellss[0].symbol == "O"){
@@ -609,6 +923,7 @@ SnapShot.prototype.generateLatestSnapShot = function(_latestCandle){
   if(snapShots[snapShots.length-1].figureMatrix.columns.length >2){
     this.trade(_latestCandle);
   }
+
 }
 
 SnapShot.prototype.writeRangeCells = function(_column, _fromRow, _toRow, _symbol){
@@ -627,6 +942,8 @@ SnapShot.prototype.writeRangeCells = function(_column, _fromRow, _toRow, _symbol
     }
   }
 }
+
+
 
 SnapShot.prototype.writeMergedCell = function(_column, _row, _symbol){
   if(debug_writeMergedCells){console.log("    writeMergedCell started.");}
@@ -672,217 +989,122 @@ SnapShot.prototype.writeMergedCell = function(_column, _row, _symbol){
 
 }
 
+SnapShot.prototype.trade = function(_latestCandle){
+
+  // If columns new, cancel all actions  
+  if(this.figureMatrix.columns.length > 
+    snapShots[_latestCandle-1].figureMatrix.columns.length){
+    tradeActions.splice(0,tradeActions.length-1);
+  }
+
+  var columnID = this.figureMatrix.columns.length-1;
+  var highPrice = parseFloat(marketData.candles[_latestCandle].mid.h);
+  var lowPrice = parseFloat(marketData.candles[_latestCandle].mid.l);
+  var closePrice = parseFloat(marketData.candles[_latestCandle].mid.c);
+
+  ////Exit
+  for(var i=0;i<this.figureMatrix.tradeBuyPosition.length;i++){
+    if(this.figureMatrix.tradeBuyPosition[i].status == "Open"){      
+      if(this.figureMatrix.tradeBuyPosition[i].columnID == columnID){
+        if(this.figureMatrix.tradeBuyPosition[i].priceObj < highPrice){
+          //profit taking
+          this.figureMatrix.tradeBuyPosition[i].exit(
+            "Buy",
+            this.time, 
+            columnID, 
+            marketData.getRowNum(this.figureMatrix.tradeBuyPosition[i].priceObj),
+            this.figureMatrix.tradeBuyPosition[i].priceObj,
+            this.figureMatrix.tradeBuyPosition[i].priceObj);
+        }
+      }
+      else{
+        //Loss Cut by new column
+        this.figureMatrix.tradeBuyPosition[i].exit(
+          "Buy",
+          this.time, 
+          columnID,
+          this.getLastRowNum(columnID),
+          closePrice, 
+          closePrice);
+      }
+    }
+  }
+
+  for(var i=0;i<this.figureMatrix.tradeSellPosition.length;i++){
+    if(this.figureMatrix.tradeSellPosition[i].status == "Open"){      
+      if(this.figureMatrix.tradeSellPosition[i].columnID == columnID ){
+        if(this.figureMatrix.tradeSellPosition[i].priceObj > lowPrice){
+          //profit taking
+          this.figureMatrix.tradeSellPosition[i].exit(
+            "Sell",
+            this.time, 
+            columnID, 
+            marketData.getRowNum(this.figureMatrix.tradeSellPosition[i].priceObj),
+            this.figureMatrix.tradeSellPosition[i].priceObj, 
+            this.figureMatrix.tradeSellPosition[i].priceObj);
+        }
+      }
+      else{
+        //Loss Cut
+        this.figureMatrix.tradeSellPosition[i].exit(
+          "Sell",
+          this.time, 
+          columnID,
+          this.getLastRowNum(columnID),
+          closePrice, 
+          closePrice); 
+      }    
+    }
+  }
+
+
+  //// Entry
+  var ratio = [0.5,0.7,1.0];
+  var i=0;
+  while(i<=tradeActions.length-1){
+    var mouseRow = paFiCanvas.getRowID(tradeActions[i].mouseY);
+    var mousePrice = marketData.getPrice(mouseRow);
+
+    if(mousePrice < highPrice && tradeActions[i].action =="BuyEntry"){
+      // var positionID = this.figureMatrix.getVacantPosisionID("Buy");
+      for(var j=0;j<3;j++){
+        var priceObjRaws = latestRectColumns * MAGIC3; 
+        var priceObj = mousePrice + priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
+        this.figureMatrix.tradeBuyPosition[j].entry(
+          "Buy",this.time, columnID, mouseRow, mousePrice,priceObj);          
+      }
+      tradeActions[i].action ="";
+    }
+    else if(mousePrice > lowPrice && tradeActions[i].action =="SellEntry"){
+      // var positionID = this.figureMatrix.getVacantPosisionID("Sell");
+      for(var j=0;j<3;j++){
+        var priceObjRaws = latestRectColumns * MAGIC3; 
+        var priceObj = mousePrice - priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
+        this.figureMatrix.tradeSellPosition[j].entry(
+          "Sell",this.time, columnID, mouseRow, mousePrice,priceObj);          
+      }
+      tradeActions[i].action ="";
+    }
+
+    i++;
+  }
+  // delete finished action
+  var i=tradeActions.length-1;
+  while(i>=0){
+  // for(var i=tradeActions.length-1; i>=0; i--){
+    if(tradeActions[i].action == ""){
+      tradeActions.splice(i,1);
+    }
+    i--;
+  }
+}
+
+
 TradeSign = function(){
   this.sign="";
   this.row=0;
   this.previousRow=0;
 }
-
-
-
-SnapShot.prototype.trade = function(_latestCandle){
-  var columnID = this.figureMatrix.columns.length-1;
-
-  //LossCut
-  if(this.figureMatrix.tradePosition.bs != ""){ //position exists
-    var latestPrice = parseFloat(marketData.candles[_latestCandle-1].mid.c);
-    var entryPrice = this.figureMatrix.tradePosition.price;
-    if( (this.figureMatrix.tradePosition.bs == "Buy") && 
-        ((latestPrice - entryPrice)*TRADE_AMOUNT < (INITIAL_DEPOSIT*LOSSCUT_RATE)*(-1))
-        ){
-      //Forced Loss Cut
-      this.figureMatrix.tradePosition.exit(
-        "Sell", this.time, columnID, marketData.getRowNum(latestPrice),
-        latestPrice);
-      this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment = 
-        this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment + "LossCut";
-      return;
-    }    
-    else if( (this.figureMatrix.tradePosition.bs == "Sell") && 
-        ((entryPrice - latestPrice)*TRADE_AMOUNT < (INITIAL_DEPOSIT*LOSSCUT_RATE)*(-1))
-        ){
-      //Forced Loss Cut
-      this.figureMatrix.tradePosition.exit(
-        "Buy", this.time, columnID, marketData.getRowNum(latestPrice),
-        latestPrice);
-      this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment = 
-        this.figureMatrix.columns[columnID].cellss[marketData.getRowNum(latestPrice)].comment + "LossCut";
-      return;
-    }
-  }
-
-  //Entry,Exit
-  var sign = new TradeSign();
-  sign = this.checkFigureSign();
-  var entryPrice=0;
-  var exitPrice=0;
-  if (this.figureMatrix.tradePosition.bs == ""){
-    if(sign.sign == "Buy"){
-      //entry(Buy)
-      entryPrice = (_latestCandle < marketData.candles.length-1)? 
-          parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row +1)*marketData.boxSize :
-          parseFloat(marketData.candles[_latestCandle].mid.c);
-      this.figureMatrix.tradePosition.entry(
-        "Buy", this.time, columnID, sign.row, entryPrice);
-
-      this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment + "Entry";
-    }
-    else if (sign.sign == "Sell"){
-      //entry(sell)
-      entryPrice = (_latestCandle < marketData.candles.length-1)? 
-          parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row -1)*marketData.boxSize :
-          parseFloat(marketData.candles[_latestCandle].mid.c);
-      this.figureMatrix.tradePosition.entry(
-        "Sell", this.time, columnID, sign.row, entryPrice);
-      this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment + "Entry";
-    }
-  }
-  else if (this.figureMatrix.tradePosition.bs == "Buy"){
-    if(sign.sign == "Sell"){
-      //exit
-      exitPrice = parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row-1)*marketData.boxSize;
-      this.figureMatrix.tradePosition.exit(
-        "Sell", this.time, columnID, sign.row, exitPrice);
-
-      this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.previousRow-1].comment + "Exit";
-    }
-  }
-  else if (this.figureMatrix.tradePosition.bs == "Sell"){
-    if(sign.sign == "Buy"){
-      exitPrice = parseFloat(marketData.candles[_latestCandle].mid.c) + (sign.previousRow - sign.row+1)*marketData.boxSize;
-      // marketData.candles[_latestCandle+1].mid.o);
-      //exit
-      this.figureMatrix.tradePosition.exit(
-        "Buy", this.time, columnID, sign.row, exitPrice);
-      this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment = 
-        this.figureMatrix.columns[columnID].cellss[sign.previousRow+1].comment + "Exit";
-    }
-  }
-
-}
-
-SnapShot.prototype.checkFigureSign = function(){
-  var sign = new TradeSign();
-  var latestColumnID = this.figureMatrix.columns.length-1;
-  var SecondPreviousColumnID = latestColumnID - 2;
-  var latestEdgeRow = this.getLastRowNum(latestColumnID);
-  var SecondPreviousEdgeRow = this.getLastRowNum(SecondPreviousColumnID);
-
-  // Rule 1: Simple Rule
-  // if O (down trend) 
-  //   compare lowest rows: latest column and 2 columns before
-  //   if latest column's row is lower than before 
-  //     Sell sign is ON 
-  if(this.trend == "Down"){
-    if(latestEdgeRow < SecondPreviousEdgeRow){
-      sign.sign = "Sell";
-      sign.row = latestEdgeRow;
-      sign.previousRow = SecondPreviousEdgeRow;
-    }
-  }
-
-  // if X (up trend) 
-  //   compare highest rows: latest column and 2 columns before
-  //   if latest column's row is higher than before 
-  //     Buy sign is ON 
-  if(this.trend == "Up"){
-    if(latestEdgeRow > SecondPreviousEdgeRow){
-      sign.sign = "Buy";
-      sign.row = latestEdgeRow;
-      sign.previousRow = SecondPreviousEdgeRow;
-    }
-  }
-  return sign;
-}
-
-
-
-Marker = function(){
-  this.figure = ""; // Line / Rect
-  this.ID = 0;
-  this.sx = 0;
-  this.sy = 0;
-  this.dx = 0;
-  this.dy = 0;
-  this.columns = 0;
-  this.rownum = 0;
-  this.lifetime = 500;
-}
-Marker.prototype.getRowCount = function(){
-  var sRow = (this.sy - MARGIN_TITLE_BAR)/PAFI_CELL_SIZE;
-  sRow = parseInt(sRow);
-  var dRow = (this.dy - MARGIN_TITLE_BAR)/PAFI_CELL_SIZE;
-  dRow = parseInt(dRow);
-  var count = dRow - sRow -1;
-  // console.log("RowCount = ",count);
-  return count;
-}
-
-Marker.prototype.getRowID = function(_yaxis){
-  var rowID = paFiCanvas.getRowNum(_yaxis);
-  return rowID;
-}
-
-Marker.prototype.getColumnCount = function(){
-  var sColumn = parseInt((this.sx - MARGIN_YAXIS_LABEL)/PAFI_CELL_SIZE);
-  var dColumn = parseInt((this.dx - MARGIN_YAXIS_LABEL)/PAFI_CELL_SIZE);
-  var count = dColumn - sColumn -1;
-  // console.log("ColumnCount = ",count);
-  return count;
-}
-
-Marker.prototype.getColor = function(_figure){
-  var mycolor;
-  if(_figure == "Line"){
-    mycolor = color(200,20,200);
-  }
-  else if(_figure == "Rect"){
-    mycolor = color(20,200,200);
-  }
-  else{
-    mycolor = color(250,200,200);
-  }
-  return mycolor;
-}
-
-Marker.prototype.drawMark = function(){
-  stroke(this.getColor(this.figure));
-  noFill();
-  strokeWeight(2);
-
-  if(this.figure == "Line"){
-    //TBD
-  }
-  else if (this.figure == "Rect"){
-    rect(this.sx,this.sy,
-        (this.dx-this.sx),(this.dy-this.sy)
-        );
-    this.columns = this.getColumnCount();
-    this.rownum = this.getRowCount();
-    var rowID = this.getRowID(this.dy);
-    var targetPriceRows = parseFloat(this.columns * MAGIC3*marketData.boxSize);
-    textSize(15);
-    strokeWeight(1);
-    // text("C:"+String(columns)+" TgtRows:"+String(targetPriceRows),this.sx,this.sy-10);
-    text("C:"+String(this.columns)+" R:"+String(this.rownum)+" T:"+String(targetPriceRows),this.sx,this.sy-10);
-    // console.log("drawMark: ",this.ID, this.figure, this.columns);
-  }
-  else if (this.figure == "Price"){
-    var rowID = paFiCanvas.getRowNum(this.sy);
-    textSize(15);
-    strokeWeight(1);
-    text(marketData.getPrice(rowID)+" :"+String(rowID),this.sx+30,this.sy-10);
-    line(this.sx,this.sy,this.sx+29,this.sy-9);
-    console.log(marketData.getPrice(rowID),rowID);
-    this.lifetime --;
-  }
-}
-
-
-
 
 function mousePressed(){
   // background(100,10,90); //refresh
@@ -925,9 +1147,12 @@ function mouseReleased() {
     newMarker.sy = sy;
     newMarker.dx = dx;    
     newMarker.dy = dy;
-    // newMarker.columns = 0;
+    newMarker.columns = newMarker.getColumnCount();
+    newMarker.rownum = newMarker.getRowCount();
+
     markers.push(newMarker);
-    // console.log("mouseReleased: ");
+
+    latestRectColumns = newMarker.columns;
   }
   // prevent default
   return false;
@@ -936,16 +1161,21 @@ function mouseReleased() {
 
 
 //Main
-
 function preload(){
   jsonPafiParameter = loadJSON(PAFI_PARAM_FILE);
   jsonMarketData = loadJSON(MARKET_DATA_FILE);
 }
 
-function setup() {  
+function setup() { 
 
-  console.log("Start PaFi!");
-  
+  console.log("Start PaFi!");  
+  // INITIAL_DEPOSIT = jsonPafiParameter.InitialDeposit; 
+  sx=0;
+  sy=0;
+  dx=0;
+  dy=0;
+
+
   //Generate Market Data
   marketData = new MarketData();
   marketData.initParam();
@@ -953,6 +1183,7 @@ function setup() {
 
   //Generate TradeRecord
   var newRecord = new TradeRecord();
+  balance = parseInt(INITIAL_DEPOSIT);
   newRecord.pair = "";
   newRecord.bs = "";
   newRecord.entryDate = "";
@@ -962,10 +1193,7 @@ function setup() {
   newRecord.exitPrice = "";
   newRecord.fee = "";
   newRecord.profitLoss = "";
-  newRecord.balance = INITIAL_DEPOSIT;
   tradeRecords.push(newRecord);
-
-
 
   //FigureMatrix
   var snapshot = new SnapShot(marketData.candles[0].time);
@@ -979,10 +1207,8 @@ function setup() {
   }
 
   console.log(snapShots);
-  console.log(tradeRecords);
 
   //Generate PaFi Canvas
-
   paFiCanvas = new PaFiCanvas();
   marketData.updateColumnNum();
   paFiCanvas.updateWidth();
@@ -991,7 +1217,6 @@ function setup() {
   background(10,10,10);
   frameRate(FRAME_RATE);
 
-
 }
 
 function draw() {
@@ -999,9 +1224,11 @@ function draw() {
     background(10,10,10);
   }
 
-    //frame
+
+  //frame
   paFiCanvas.drawframe();
 
+  arbitor = 1;
   //Mark
   for(var i=0; i<markers.length; i++){
     markers[i].drawMark();
@@ -1010,17 +1237,35 @@ function draw() {
     }
   }
 
-
-  //if nPressed then refresh screen and wait for next keyPress
-  //if sPressed then start automatic drawing 
-  //if aPressed then draw snapshot of "aPressed"
+  //Figure
   if (nPressed){
     background(10,10,10);
     aPressed = 0;
+    aPressedChecker = 0;
     sPressed = 0;
     nPressed = 0;
     lPressed = 0;
+    onePressed = 0;
+    zeroPressed = 0;
     snapIterator = 0;
+  }
+  else if (aPressed){
+    if(aPressed> aPressedChecker+1){
+      aPressedChecker = aPressed; // Do nothing
+    }
+    else if(aPressed > aPressedChecker){ //Update Draw
+      paFiCanvas.copyPosition(aPressed);
+      snapShots[aPressed].trade(aPressed);
+      paFiCanvas.drawLatestDate(aPressed);
+      paFiCanvas.drawMatrix(aPressed);
+      paFiCanvas.drawSigns(aPressed);
+      aPressedChecker = aPressed;
+    }
+    else{ //Redraw
+      paFiCanvas.drawLatestDate(aPressed);
+      paFiCanvas.drawMatrix(aPressed);
+      paFiCanvas.drawSigns(aPressed);
+    }
   }
   else if (sPressed){
     //FigureMatrix
@@ -1046,21 +1291,33 @@ function draw() {
       paFiCanvas.drawMatrix(marketData.candles.length-1);
   }
 
+    arbitor = 0;
+
 }
 
 
 function keyTyped(){
+
+  if(arbitor) return;
+
   // console.log("keyTyped.",key);
   if(key == "a"){
+    console.log("a typed");
     aPressed++;
   }
   else if (key == "n"){
+    console.log("n typed");
     nPressed=1;
   }
   else if (key == "s"){
+    console.log("s typed");
     sPressed=1;
   }
-  else if (key == "v"){
+  else if (key == "1"){ //Buy Entry
+    console.log("1 typed");
+    var newAction = new TradeAction();
+    newAction.initParam(mouseX,mouseY,"BuyEntry");
+    tradeActions.push(newAction);
     var newMarker = new Marker();
     newMarker.figure = "Price";
     newMarker.sx = mouseX;
@@ -1070,7 +1327,81 @@ function keyTyped(){
     markers.push(newMarker);
 
   }
+  else if (key == "2"){ //Buy Exit
+    console.log("2 typed");
+    var newAction = new TradeAction();
+    newAction.initParam(mouseX,mouseY,"BuyExit");
+    tradeActions.push(newAction);
+    var newMarker = new Marker();
+    newMarker.figure = "Price";
+    newMarker.sx = mouseX;
+    newMarker.sy = mouseY;
+    newMarker.ID = markers.length;
+    newMarker.drawMark();
+    markers.push(newMarker);
+  }
+  else if (key == "9"){ //Sell Entry
+    console.log("9 typed");
+    var newAction = new TradeAction();
+    newAction.initParam(mouseX,mouseY,"SellEntry");
+    tradeActions.push(newAction);
+    var newMarker = new Marker();
+    newMarker.figure = "Price";
+    newMarker.sx = mouseX;
+    newMarker.sy = mouseY;
+    newMarker.ID = markers.length;
+    newMarker.drawMark();
+    markers.push(newMarker);
+  }
+  else if (key == "0"){ //Sell Exit
+    console.log("0 typed");
+    var newAction = new TradeAction();
+    newAction.initParam(mouseX,mouseY,"SellExit");
+    tradeActions.push(newAction);
+    var newMarker = new Marker();
+    newMarker.figure = "Price";
+    newMarker.sx = mouseX;
+    newMarker.sy = mouseY;
+    newMarker.ID = markers.length;
+    newMarker.drawMark();
+    markers.push(newMarker);
+  }
+  else if(key == "r"){ // Reset
+    console.log("r typed");
+    tradeActions = []; //Delete all actions
+  }
+  else if(key == "t"){ // Check tradeRecords
+    console.log("t typed");
+  console.log(tradeRecords);
+  console.log(balance);
+  }
+  else if(key == "p"){ // Positions
+    console.log("p typed");
+    console.log(snapShots[aPressed].figureMatrix.tradeBuyPosition);
+    console.log(snapShots[aPressed].figureMatrix.tradeSellPosition);
+  }
+  else if(key == "c"){ //Actions
+    console.log("c typed");
+    console.log(tradeActions);
+  }
+  else if(key == "d"){
+    console.log("d typed");
+    for(var i=0; i<markers.length; i++){
+      markers[i].drawMark();
+    }
+  }
+  else if (key == "v"){
+    console.log("v typed");
+    var newMarker = new Marker();
+    newMarker.figure = "Price";
+    newMarker.sx = mouseX;
+    newMarker.sy = mouseY;
+    newMarker.ID = markers.length;
+    newMarker.drawMark();
+    markers.push(newMarker);
+  }
   else if(key == "l"){
+    console.log("l typed");
     lPressed = 1;
   }
 }
