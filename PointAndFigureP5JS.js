@@ -1,4 +1,4 @@
-var INSTRUMENT = "INSTRUMENT_NAME";
+var INSTRUMENT = "EUR_AUD_D";
 
 //json data
 var jsonMarketData;
@@ -834,7 +834,7 @@ SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
     if(_latestCandle == debug_snapShotID){
       if(debug_updateFigureMatrix){console.log("  trend:Up priceChange:Down"); }
     }
-      if ((lastPriceRowNum - newPriceRowNum) > marketData.reversalAmount){
+      if ((lastPriceRowNum - newPriceRowNum) >= marketData.reversalAmount){
         //trend changed
         if(_latestCandle == debug_snapShotID){
           if(debug_updateFigureMatrix){console.log("  trend change to Down.");}
@@ -864,7 +864,7 @@ SnapShot.prototype.updateFigureMatrix = function(_latestCandle){
       if(debug_updateFigureMatrix){console.log("trend:Down priceChange:Up"); }
     }
       //4.
-      if (( newPriceRowNum - lastPriceRowNum) > marketData.reversalAmount){
+      if (( newPriceRowNum - lastPriceRowNum) >= marketData.reversalAmount){
         //trend changed
         if(_latestCandle <= debug_snapShotID){
           if(debug_updateFigureMatrix){console.log("  trend change to Up.");}
