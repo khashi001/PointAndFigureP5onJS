@@ -1,4 +1,4 @@
-var INSTRUMENT = "EUR_AUD_D";
+var INSTRUMENT = "INSTRUMENT_NAME";
 
 //json data
 var jsonMarketData;
@@ -39,6 +39,7 @@ var aPressedChecker = 0;
 var nPressed = 0;
 var sPressed = 0;
 var lPressed = 0;
+var bPressed = 0;
 var onePressed = 0;
 var zeroPressed = 0;
 
@@ -1245,6 +1246,7 @@ function draw() {
     sPressed = 0;
     nPressed = 0;
     lPressed = 0;
+    bPressed = 0;
     onePressed = 0;
     zeroPressed = 0;
     snapIterator = 0;
@@ -1287,8 +1289,9 @@ function draw() {
     }    
   }
   else if (lPressed){ //Draw Last Result
-      paFiCanvas.drawLatestDate(marketData.candles.length-1);
-      paFiCanvas.drawMatrix(marketData.candles.length-1);
+    var candleID = marketData.candles.length-1 - bPressed;
+    paFiCanvas.drawLatestDate(candleID);
+    paFiCanvas.drawMatrix(candleID);
   }
 
     arbitor = 0;
@@ -1305,13 +1308,61 @@ function keyTyped(){
     console.log("a typed");
     aPressed++;
   }
+  else if(key == "b"){
+    console.log("b typed");
+    bPressed ++;
+  }
+  else if(key == "f"){
+    console.log("f typed");
+    if(bPressed > 1){
+      bPressed --;
+    }
+  }
+  else if(key == "c"){ //Actions
+    console.log("c typed");
+    console.log(tradeActions);
+  }
+  else if(key == "d"){
+    console.log("d typed");
+    for(var i=0; i<markers.length; i++){
+      markers[i].drawMark();
+    }
+  }
+  else if(key == "l"){
+    console.log("l typed");
+    lPressed = 1;
+  }
   else if (key == "n"){
     console.log("n typed");
     nPressed=1;
   }
+  else if(key == "p"){ // Positions
+    console.log("p typed");
+    console.log(snapShots[aPressed].figureMatrix.tradeBuyPosition);
+    console.log(snapShots[aPressed].figureMatrix.tradeSellPosition);
+  }
+  else if(key == "r"){ // Reset
+    console.log("r typed");
+    tradeActions = []; //Delete all actions
+  }
   else if (key == "s"){
     console.log("s typed");
     sPressed=1;
+  }
+  else if(key == "t"){ // Check tradeRecords
+    console.log("t typed");
+  console.log(tradeRecords);
+  console.log(balance);
+  }
+  else if (key == "v"){
+    console.log("v typed");
+    var newMarker = new Marker();
+    newMarker.figure = "Price";
+    newMarker.sx = mouseX;
+    newMarker.sy = mouseY;
+    newMarker.ID = markers.length;
+    newMarker.drawMark();
+    markers.push(newMarker);
   }
   else if (key == "1"){ //Buy Entry
     console.log("1 typed");
@@ -1365,43 +1416,5 @@ function keyTyped(){
     newMarker.ID = markers.length;
     newMarker.drawMark();
     markers.push(newMarker);
-  }
-  else if(key == "r"){ // Reset
-    console.log("r typed");
-    tradeActions = []; //Delete all actions
-  }
-  else if(key == "t"){ // Check tradeRecords
-    console.log("t typed");
-  console.log(tradeRecords);
-  console.log(balance);
-  }
-  else if(key == "p"){ // Positions
-    console.log("p typed");
-    console.log(snapShots[aPressed].figureMatrix.tradeBuyPosition);
-    console.log(snapShots[aPressed].figureMatrix.tradeSellPosition);
-  }
-  else if(key == "c"){ //Actions
-    console.log("c typed");
-    console.log(tradeActions);
-  }
-  else if(key == "d"){
-    console.log("d typed");
-    for(var i=0; i<markers.length; i++){
-      markers[i].drawMark();
-    }
-  }
-  else if (key == "v"){
-    console.log("v typed");
-    var newMarker = new Marker();
-    newMarker.figure = "Price";
-    newMarker.sx = mouseX;
-    newMarker.sy = mouseY;
-    newMarker.ID = markers.length;
-    newMarker.drawMark();
-    markers.push(newMarker);
-  }
-  else if(key == "l"){
-    console.log("l typed");
-    lPressed = 1;
   }
 }
