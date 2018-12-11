@@ -22,9 +22,8 @@ var MARGIN_YCELL = 2;
 var PAFI_CELL_SIZE = 20;
 var PAFI_COLUMN_NUM = 100; //tekitou
 var MARGIN_RIGHT_COLUMN = 2;
-var TRADE_AMOUNT = 3; // DMM FX
 var TRADE_FEE_RATE = 0.0002; //DMM FX
-var INITIAL_DEPOSIT = 1000000; //kari
+var INITIAL_DEPOSIT = 3; 
 var X_LITTLE_MERGIN = 2;
 var LOSSCUT_RATE = 0.1;
 var FRAME_RATE = 30;
@@ -32,6 +31,9 @@ var MARKET_DATA_FILE = INSTRUMENT+'.json';
 var PAFI_PARAM_FILE = 'PafiParameter_'+INSTRUMENT+'.json';
 var POSITION_MAX = 999; //available positions
 var POSITIONS = 3;
+var TRADE_AMOUNT;
+var TRADEYEAR;
+
 //Iteration
 var snapIterator = 0;
 var aPressed = 0;
@@ -93,6 +95,7 @@ MarketData.prototype.initParam = function(){
   this.makeScale();
 };
 
+
 MarketData.prototype.getRowNum = function(_price){
   var row = parseInt( (_price - this.minPrice) / this.boxSize );
   // console.log("getRowNum: rowNum="+row+", _price="+_price+", boxSize="+this.boxSize);
@@ -143,7 +146,7 @@ Marker = function(){
   this.dy = 0;
   this.columns = 0;
   this.rownum = 0;
-  this.lifetime = 500;
+  this.lifetime = 300;
 }
 
 Marker.prototype.getRowCount = function(){
@@ -218,6 +221,10 @@ PaFiCanvas = function(){
   this.height = PAFI_CELL_SIZE*marketData.numOfRows+MARGIN_TITLE_BAR;
   this.width = PAFI_CELL_SIZE*marketData.columnNum+MARGIN_YAXIS_LABEL+MARGIN_RIGHT_COLUMN;
   // console.log("PaFiCanvas: ",marketData.numOfRows,this.height);
+  this.contAreaSx = 10;
+  this.contAreaSy = 10;
+  this.contAreaDx = 40;
+  this.contAreaDy = 40;
 }
 
 PaFiCanvas.prototype.updateWidth = function(){
@@ -227,12 +234,21 @@ PaFiCanvas.prototype.updateWidth = function(){
 }
 
 PaFiCanvas.prototype.drawLatestDate = function(snapID){
+  if(snapID > marketData.candles.length-1){
+    snapID = marketData.candles.length-1;
+  }
   textSize(30);
   stroke(201,235,139);
   strokeWeight(1);
   fill(201,235,139);
   text(snapShots[snapID].time, this.width*0.1, MARGIN_TITLE_BAR*1.6);
 
+}
+
+PaFiCanvas.prototype.drawContinuousArea = function(){
+  stroke(100,100,100);
+  fill(100,100,100);
+  rect(this.contAreaSx,this.contAreaSy,this.contAreaDx, this.contAreaDy);
 }
 
 PaFiCanvas.prototype.drawframe = function(){
@@ -293,6 +309,11 @@ PaFiCanvas.prototype.drawMatrix = function(snapID){
   var green = color(109,149,32,225);
   var purple = color(172,128,255);
   textSize(10);
+
+  if(snapID > marketData.candles.length-1){
+    snapID = marketData.candles.length-1;
+  }
+
   var latestFigureMatrix = snapShots[snapID].figureMatrix;
   for(var column=0; column < latestFigureMatrix.columns.length; column++){
     for(var row=0; row < marketData.numOfRows; row++){
@@ -391,14 +412,14 @@ PaFiCanvas.prototype.drawSigns = function(snapID){
       fill(colorBuyEntry);
       xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN;
       yAxis = this.getCanvasYaxis(row);
-      rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);      
+      rect(xAxis,yAxis,PAFI_CELL_SIZE/2.5,PAFI_CELL_SIZE/2.5);      
     }
     else if(record.bs == "Sell"){
       stroke(colorSellEntry);
       fill(colorSellEntry);
       xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN+PAFI_CELL_SIZE/2;
       yAxis = this.getCanvasYaxis(row);
-      rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);      
+      rect(xAxis,yAxis,PAFI_CELL_SIZE/2.5,PAFI_CELL_SIZE/2.5);      
     }
     else{
       console.log("Unexpedted value in drawSigns!");
@@ -422,7 +443,7 @@ PaFiCanvas.prototype.drawSigns = function(snapID){
         }
         xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN;
         yAxis = this.getCanvasYaxis(row)+PAFI_CELL_SIZE/2;
-        rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);
+        rect(xAxis,yAxis,PAFI_CELL_SIZE/2.5,PAFI_CELL_SIZE/2.5);
       }
       else if(record.bs == "Sell"){
         if(record.losscut == "Yes"){
@@ -435,7 +456,7 @@ PaFiCanvas.prototype.drawSigns = function(snapID){
         }
         xAxis = this.getCanvasXaxis(column)-X_LITTLE_MERGIN+PAFI_CELL_SIZE/2;
         yAxis = this.getCanvasYaxis(row)+PAFI_CELL_SIZE/2;
-        rect(xAxis,yAxis,PAFI_CELL_SIZE/2,PAFI_CELL_SIZE/2);      
+        rect(xAxis,yAxis,PAFI_CELL_SIZE/2.5,PAFI_CELL_SIZE/2.5);      
       }
     }
     i--;
@@ -523,7 +544,7 @@ TradePosition.prototype.entry = function(_sign, _time, _columnID, _row, _price, 
     _columnID, 
     _row,
     _sign,
-    TRADE_AMOUNT, 
+    TRADE_AMOUNT/POSITIONS, 
     _price,
     _priceObj,
     "Open");
@@ -532,12 +553,12 @@ TradePosition.prototype.entry = function(_sign, _time, _columnID, _row, _price, 
   var newRecord = new TradeRecord();
   newRecord.pair = marketData.instrument;
   newRecord.bs = _sign;
-  newRecord.entryDate = _time;
+  newRecord.entrydate = _time;
   newRecord.entryPrice = _price;
-  newRecord.amount = TRADE_AMOUNT;
+  newRecord.amount = TRADE_AMOUNT/POSITIONS;
   newRecord.exitDate = "";
   newRecord.exitPrice = 0;
-  newRecord.fee = _price * TRADE_AMOUNT * TRADE_FEE_RATE;
+  newRecord.fee = _price * TRADE_AMOUNT/POSITIONS * TRADE_FEE_RATE;
   newRecord.profitLoss = 0;
   // newRecord.balance = tradeRecords[tradeRecords.length-1].balance;
   newRecord.entryRow = _row;
@@ -558,7 +579,7 @@ TradePosition.prototype.exit = function(
     _columnID, 
     _row,
     _sign,
-    TRADE_AMOUNT, 
+    TRADE_AMOUNT/POSITIONS, 
     _price,
     _priceObj,
     "");
@@ -572,22 +593,23 @@ TradePosition.prototype.exit = function(
     return;
   }
   record.exitPrice = _price;
-  record.fee = record.fee + _price * TRADE_AMOUNT * TRADE_FEE_RATE;
+  record.fee = record.fee + _price * TRADE_AMOUNT/POSITIONS * TRADE_FEE_RATE;
   if(_sign == "Buy"){
 
-    record.profitLoss = (record.exitPrice - record.entryPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
+    record.profitLoss = (record.exitPrice - record.entryPrice) * TRADE_AMOUNT/POSITIONS * (1 - TRADE_FEE_RATE);
   }
   else{
-    record.profitLoss = (record.entryPrice - record.exitPrice) * TRADE_AMOUNT * (1 - TRADE_FEE_RATE);
+    record.profitLoss = (record.entryPrice - record.exitPrice) * TRADE_AMOUNT/POSITIONS * (1 - TRADE_FEE_RATE);
 
 
   }
   balance = balance +  record.profitLoss - record.fee;
+  record.balance = balance;
   record.exitColumnID = _columnID;
   record.exitRow = _row;
 
   
-  if(debug_exit){console.log("EXIT ",balance,_sign,_time,_columnID,_row,_price);}
+  if(debug_exit){console.log("EXIT ",record.balance,record.profitLoss,_sign,_time,_columnID,_row,_price);}
 
   this.recordID = 0;
 
@@ -620,7 +642,7 @@ TradeRecord = function (){
   this.exitDate = "";
   this.exitPrice = 0;
   this.fee = 0;
-
+  this.balance = 0;
   this.profitLoss = 0;
   this.entryRow = 0;
   this.entryColumnID = 0;
@@ -995,7 +1017,11 @@ SnapShot.prototype.trade = function(_latestCandle){
   // If columns new, cancel all actions  
   if(this.figureMatrix.columns.length > 
     snapShots[_latestCandle-1].figureMatrix.columns.length){
-    tradeActions.splice(0,tradeActions.length-1);
+    var i=tradeActions.length-1;
+    while(i>=0){
+      tradeActions.splice(i,1);
+      i--;
+    }
   }
 
   var columnID = this.figureMatrix.columns.length-1;
@@ -1027,9 +1053,9 @@ SnapShot.prototype.trade = function(_latestCandle){
           this.getLastRowNum(columnID),
           closePrice, 
           closePrice);
+        }
       }
     }
-  }
 
   for(var i=0;i<this.figureMatrix.tradeSellPosition.length;i++){
     if(this.figureMatrix.tradeSellPosition[i].status == "Open"){      
@@ -1065,22 +1091,19 @@ SnapShot.prototype.trade = function(_latestCandle){
   while(i<=tradeActions.length-1){
     var mouseRow = paFiCanvas.getRowID(tradeActions[i].mouseY);
     var mousePrice = marketData.getPrice(mouseRow);
+    var priceObjRaws = latestRectColumns * MAGIC3;
 
     if(mousePrice < highPrice && tradeActions[i].action =="BuyEntry"){
-      // var positionID = this.figureMatrix.getVacantPosisionID("Buy");
       for(var j=0;j<3;j++){
-        var priceObjRaws = latestRectColumns * MAGIC3; 
-        var priceObj = mousePrice + priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
+        var priceObj = (mousePrice - marketData.boxSize*2) + priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
         this.figureMatrix.tradeBuyPosition[j].entry(
-          "Buy",this.time, columnID, mouseRow, mousePrice,priceObj);          
+          "Buy",this.time, columnID, mouseRow, mousePrice,priceObj);
       }
       tradeActions[i].action ="";
     }
     else if(mousePrice > lowPrice && tradeActions[i].action =="SellEntry"){
-      // var positionID = this.figureMatrix.getVacantPosisionID("Sell");
       for(var j=0;j<3;j++){
-        var priceObjRaws = latestRectColumns * MAGIC3; 
-        var priceObj = mousePrice - priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
+        var priceObj = (mousePrice - marketData.boxSize*2) - priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
         this.figureMatrix.tradeSellPosition[j].entry(
           "Sell",this.time, columnID, mouseRow, mousePrice,priceObj);          
       }
@@ -1105,6 +1128,47 @@ TradeSign = function(){
   this.sign="";
   this.row=0;
   this.previousRow=0;
+}
+
+function saveTradeRecords(){
+  var table = new p5.Table();
+  table.addColumn('id');
+  table.addColumn('pair');
+  table.addColumn('bs');
+  table.addColumn('amount');
+  table.addColumn('entrydate');
+  table.addColumn('entryPrice');
+  table.addColumn('exitDate');
+  table.addColumn('exitPrice');
+  table.addColumn('fee');
+  table.addColumn('profitLoss');
+  table.addColumn('balance');
+  table.addColumn('entryRow');
+  table.addColumn('entryColumnID');
+  table.addColumn('exitRow');
+  table.addColumn('exitColumnID');
+
+  for(var i=0;i<tradeRecords.length;i++){
+    var newRow = table.addRow();
+    newRow.setNum('id',table.getRowCount()-1);
+    newRow.setString('pair',tradeRecords[i].pair);
+    newRow.setString('bs',tradeRecords[i].bs);
+    newRow.setNum('amount',tradeRecords[i].amount);
+    newRow.setString('entrydate',tradeRecords[i].entrydate);
+    newRow.setNum('entryPrice',tradeRecords[i].entryPrice);
+    newRow.setString('exitDate',tradeRecords[i].exitDate);
+    newRow.setNum('exitPrice',tradeRecords[i].exitPrice); 
+    newRow.setNum('fee',tradeRecords[i].fee);
+    newRow.setNum('profitLoss',tradeRecords[i].profitLoss);
+    newRow.setNum('balance',tradeRecords[i].balance);
+    newRow.setNum('entryRow',tradeRecords[i].entryRow);
+    newRow.setNum('entryColumnID',tradeRecords[i].entryColumnID);
+    newRow.setNum('entryRow',tradeRecords[i].entryRow);
+    newRow.setNum('exitRow',tradeRecords[i].exitRow);
+    newRow.setNum('exitColumnID',tradeRecords[i].exitColumnID);
+  }
+  var fileName = INSTRUMENT+'.csv';
+  saveTable(table,fileName, 'csv');  
 }
 
 function mousePressed(){
@@ -1170,11 +1234,13 @@ function preload(){
 function setup() { 
 
   console.log("Start PaFi!");  
-  // INITIAL_DEPOSIT = jsonPafiParameter.InitialDeposit; 
   sx=0;
   sy=0;
   dx=0;
   dy=0;
+
+  INITIAL_DEPOSIT = parseInt(jsonPafiParameter.InitialDeposit); 
+  TRADE_AMOUNT = parseInt(jsonPafiParameter.Amount);
 
 
   //Generate Market Data
@@ -1182,18 +1248,15 @@ function setup() {
   marketData.initParam();
   console.log(marketData);
 
+  var str1 = marketData.candles[marketData.candles.length-1].time;
+  var str2 = str1.split('-');
+  TRADEYEAR = str2[0];
+
+
   //Generate TradeRecord
-  var newRecord = new TradeRecord();
   balance = parseInt(INITIAL_DEPOSIT);
-  newRecord.pair = "";
-  newRecord.bs = "";
-  newRecord.entryDate = "";
-  newRecord.entryPrice = "";
-  newRecord.amount = "";
-  newRecord.exitDate = "";
-  newRecord.exitPrice = "";
-  newRecord.fee = "";
-  newRecord.profitLoss = "";
+  var newRecord = new TradeRecord();
+  newRecord.balance = balance;
   tradeRecords.push(newRecord);
 
   //FigureMatrix
@@ -1229,12 +1292,26 @@ function draw() {
   //frame
   paFiCanvas.drawframe();
 
+
+  //aPressed continuous area
+  paFiCanvas.drawContinuousArea();
+
   arbitor = 1;
   //Mark
   for(var i=0; i<markers.length; i++){
     markers[i].drawMark();
     if(markers[i].lifetime <1){
       markers.splice(i,1);
+    }
+  }
+
+  //Detect Continuous aPressed sign
+  if(aPressed){
+    if(mouseX > paFiCanvas.contAreaSx && 
+      mouseX < paFiCanvas.contAreaDx &&
+      mouseY > paFiCanvas.contAreaSy &&
+      mouseY < paFiCanvas.contAreaDy){
+      aPressed++;      
     }
   }
 
@@ -1254,6 +1331,12 @@ function draw() {
   else if (aPressed){
     if(aPressed> aPressedChecker+1){
       aPressedChecker = aPressed; // Do nothing
+    }
+    else if(aPressed > marketData.candles.length-1){
+      //Redraw
+      paFiCanvas.drawLatestDate(aPressed);
+      paFiCanvas.drawMatrix(aPressed);
+      paFiCanvas.drawSigns(aPressed);
     }
     else if(aPressed > aPressedChecker){ //Update Draw
       paFiCanvas.copyPosition(aPressed);
@@ -1309,14 +1392,14 @@ function keyTyped(){
     aPressed++;
   }
   else if(key == "b"){
-    console.log("b typed");
     bPressed ++;
+    console.log("b typed:",bPressed);
   }
   else if(key == "f"){
-    console.log("f typed");
-    if(bPressed > 1){
+    if(bPressed > 0){
       bPressed --;
     }
+    console.log("f typed:",bPressed);
   }
   else if(key == "c"){ //Actions
     console.log("c typed");
@@ -1351,8 +1434,10 @@ function keyTyped(){
   }
   else if(key == "t"){ // Check tradeRecords
     console.log("t typed");
-  console.log(tradeRecords);
-  console.log(balance);
+    console.log(tradeRecords);
+    console.log("Balance = ",balance);
+    saveTradeRecords();    
+
   }
   else if (key == "v"){
     console.log("v typed");
