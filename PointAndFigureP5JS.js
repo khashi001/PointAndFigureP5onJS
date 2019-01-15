@@ -115,6 +115,8 @@ MarketData.prototype.makeScale = function(){
         this.minPrice = parseFloat(this.candles[i].mid.l);
       }      
     }
+    this.minPrice = this.boxSize * parseInt(this.minPrice/this.boxSize);
+    this.maxPrice = this.boxSize * (parseInt(this.maxPrice/this.boxSize)+1);
     this.numOfRows = MARGIN_ROW + parseInt((this.maxPrice - this.minPrice)/this.boxSize);
     this.columnNum = parseInt((windowWidth-MARGIN_YAXIS_LABEL)/PAFI_CELL_SIZE);
 }
@@ -1014,7 +1016,22 @@ SnapShot.prototype.writeMergedCell = function(_column, _row, _symbol){
 
 SnapShot.prototype.trade = function(_latestCandle){
 
-  // If columns new, cancel all actions  
+  // If columns new, cancel opposite entry orders 
+  if(this.figureMatrix.columns.length > 
+    snapShots[_latestCandle-1].figureMatrix.columns.length){
+      var i=tradeActions.length-1;
+      while(i>=0){
+        if(tradeActions[i].action == "BuyEntry" && this.trend == "Down"){
+          tradeActions.splice(i,1);
+        }
+        else if(tradeActions[i].action == "SellEntry" && this.trend == "Up"){
+          tradeActions.splice(i,1);
+        }
+        i--;
+      }
+    }
+
+/*
   if(this.figureMatrix.columns.length > 
     snapShots[_latestCandle-1].figureMatrix.columns.length){
     var i=tradeActions.length-1;
@@ -1023,7 +1040,7 @@ SnapShot.prototype.trade = function(_latestCandle){
       i--;
     }
   }
-
+*/
   var columnID = this.figureMatrix.columns.length-1;
   var highPrice = parseFloat(marketData.candles[_latestCandle].mid.h);
   var lowPrice = parseFloat(marketData.candles[_latestCandle].mid.l);
@@ -1095,7 +1112,7 @@ SnapShot.prototype.trade = function(_latestCandle){
 
     if(mousePrice < highPrice && tradeActions[i].action =="BuyEntry"){
       for(var j=0;j<3;j++){
-        var priceObj = (mousePrice - marketData.boxSize*2) + priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
+        var priceObj = (mousePrice - marketData.boxSize) + priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
         this.figureMatrix.tradeBuyPosition[j].entry(
           "Buy",this.time, columnID, mouseRow, mousePrice,priceObj);
       }
@@ -1103,7 +1120,7 @@ SnapShot.prototype.trade = function(_latestCandle){
     }
     else if(mousePrice > lowPrice && tradeActions[i].action =="SellEntry"){
       for(var j=0;j<3;j++){
-        var priceObj = (mousePrice - marketData.boxSize*2) - priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
+        var priceObj = (mousePrice + marketData.boxSize) - priceObjRaws*parseFloat(marketData.boxSize)*ratio[j];
         this.figureMatrix.tradeSellPosition[j].entry(
           "Sell",this.time, columnID, mouseRow, mousePrice,priceObj);          
       }
