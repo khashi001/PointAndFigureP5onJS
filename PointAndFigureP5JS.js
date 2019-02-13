@@ -137,6 +137,48 @@ MarketData.prototype.getPrice = function(_row){ //Minimum Price of the Box
   return price;
 }
 
+MarketData.prototype.timeNYtoTK = function(_dateString){
+  // In: YYYY-MM-DDTHH:MM:SS.00...00Z (NewYork Server)
+  // Out: YYYY-MM-DD:HH:MM (Tokyo +14)
+
+  var yearMonth = _dateString.split('-'); // -> YYYY,MM,DDTHH...
+  var date = yearMonth[2].split('T'); // -> DD,HH:MM:SS.00...
+  var hourMin = date[1].split(':'); // -> HH,MM,SS.00...
+  
+  var dateYear = parseInt(yearMonth[0]);
+  var dateMonth = parseInt(yearMonth[1]);
+  var dateDay = parseInt(date[0]);
+  var dateHour = parseInt(hourMin[0]);
+  var dateMin = parseInt(hourMin[1]);
+
+  var monthDays = [
+    31, //Jan
+    28, //Feb
+    31, //Mar
+    30, //Apl
+    31, //May
+    30, //Jun
+    31, //Jul
+    31, //Aug
+    30, //Sep
+    31, //Oct
+    30, //Nov
+    31  //Dec
+  ];
+
+  dateHour = dateHour + 14;
+  if(dateHour > 24){
+    dateHour = dateHour - 24;
+    dateDay = dateDay +1;
+    if(dateDay > monthDays[dateMonth]){
+      dateDay = 1;
+      dateMonth + dateMonth + 1;
+    }
+  }
+
+  var newdateString = dateYear + '-' + ('0'+dateMonth).slice(-2) + '-' + ('0'+dateDay).slice(-2) + ' ' + ('0'+dateHour).slice(-2) + ':' + ('0'+dateMin).slice(-2) + ' TYO';
+  return newdateString;
+}
 
 
 Marker = function(){
@@ -243,8 +285,8 @@ PaFiCanvas.prototype.drawLatestDate = function(snapID){
   stroke(201,235,139);
   strokeWeight(1);
   fill(201,235,139);
-  text(snapShots[snapID].time, this.width*0.1, MARGIN_TITLE_BAR*1.6);
-
+  //text(snapShots[snapID].time, this.width*0.1, MARGIN_TITLE_BAR*1.6);
+  text(marketData.timeNYtoTK(snapShots[snapID].time), this.width*0.1, MARGIN_TITLE_BAR*1.6);
 }
 
 PaFiCanvas.prototype.drawContinuousArea = function(){
@@ -297,10 +339,8 @@ PaFiCanvas.prototype.drawframe = function(){
 
   //Start and End date
   textSize(20);
-  text(marketData.candles[0].time, this.width*0.4, MARGIN_TITLE_BAR*0.45);
-  text(marketData.candles[marketData.candles.length-1].time, this.width*0.4, MARGIN_TITLE_BAR*0.90);
-
-
+  text(marketData.timeNYtoTK(marketData.candles[0].time), this.width*0.4, MARGIN_TITLE_BAR*0.45);
+  text(marketData.timeNYtoTK(marketData.candles[marketData.candles.length-1].time), this.width*0.4, MARGIN_TITLE_BAR*0.90);
 };
 
 
